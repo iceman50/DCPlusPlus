@@ -22,6 +22,8 @@
 
 #include "GetSet.h"
 #include "HubSettings.h"
+#include "typedefs.h"
+#include "Util.h"
 
 namespace dcpp {
 
@@ -68,6 +70,18 @@ public:
 	GETSET(string, password, Password);
 	GETSET(string, encoding, Encoding);
 	GETSET(string, group, Group);
+	GETSET(StringList, failoverServers, FailoverServers);
+
+	bool hasServer(const string& aUrl) const {
+		if(Util::stricmp(getServer(), aUrl) == 0)
+			return true;
+
+		for(auto& s: getFailoverServers()) {
+			if(Util::stricmp(s, aUrl) == 0)
+				return true;
+		}
+		return false;
+	}
 };
 
 }
