@@ -1153,7 +1153,9 @@ dwarf_next_cu_header_e(Dwarf_Debug dbg,
         next_cu_offset,
         header_cu_type,
         error);
-    if (! dbg->de_debug_addr_version) {
+    if (res == DW_DLV_OK &&
+        !dbg->de_debug_addr_version &&
+        version_stamp && offset_size && address_size) {
         /*  To enable printing raw GNU extension .debug_addr */
         dbg->de_debug_addr_version = (Dwarf_Half)*version_stamp;
         dbg->de_debug_addr_offset_size = (Dwarf_Half)*offset_size;

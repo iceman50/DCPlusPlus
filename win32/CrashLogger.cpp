@@ -41,74 +41,104 @@ parse it. */
 #define LIBDWARF_STATIC
 #include <libdwarf.h>
 
-/* The following functions are called by libdwarf to get information about the sections in our
-file. libdwarf was originally designed for ELF, but it fortunately provides abstract methods one
-can use to load sections in a different format, such as PE/COFF in our case.
-Section indexes are offset to 1 because the first section (index 0) is reserved in libdwarf.
-The "obj" parameter passed to our callbacks is a PLOADED_IMAGE. */
+bool isPortableExecutable(const string& path) {
+	std::ifstream file(path, std::ios::binary);
+	WORD signature = 0;
+	return file.read(reinterpret_cast<char*>(&signature), sizeof(signature)) &&
+		signature == IMAGE_DOS_SIGNATURE;
+}
 
-int get_section_info(void* obj, Dwarf_Unsigned section_index, Dwarf_Obj_Access_Section_a* return_section, int* error) {
-	if(section_index == 0) {
-		// simulate the ELF empty section at index 0, as recommended in various comments in dwarf_init_finish.c.
-		return_section->as_addr = 0;
-		return_section->as_size = 0;
-		static char emptyStr = '\0';
-		return_section->as_name = &emptyStr;
-		return_section->as_link = 0;
-		return DW_DLV_OK;
+bool dieContainsAddress(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr addr, Dwarf_Error& error) {
+	Dwarf_Addr lowpc = 0;
+	Dwarf_Addr highpc = 0;
+	Dwarf_Attribute highAttr = nullptr;
+	if(dwarf_lowpc(die, &lowpc, &error) == DW_DLV_OK &&
+		dwarf_attr(die, DW_AT_high_pc, &highAttr, &error) == DW_DLV_OK)
+	{
+		Dwarf_Half form = 0;
+		if(dwarf_whatform(highAttr, &form, &error) == DW_DLV_OK) {
+			bool gotHigh = false;
+			if(form == DW_FORM_addr) {
+				Dwarf_Half highForm = 0;
+				enum Dwarf_Form_Class highClass = DW_FORM_CLASS_UNKNOWN;
+				gotHigh = dwarf_highpc_b(die, &highpc, &highForm, &highClass, &error) == DW_DLV_OK;
+			} else {
+				Dwarf_Unsigned offset = 0;
+				if(dwarf_formudata(highAttr, &offset, &error) == DW_DLV_OK) {
+					highpc = lowpc + offset;
+					gotHigh = true;
+				}
+			}
+			if(gotHigh && addr >= lowpc && addr < highpc) {
+				dwarf_dealloc(dbg, highAttr, DW_DLA_ATTR);
+				return true;
+			}
+		}
+		dwarf_dealloc(dbg, highAttr, DW_DLA_ATTR);
 	}
 
-	auto image = reinterpret_cast<PLOADED_IMAGE>(obj);
-	auto section = image->Sections + section_index - 1;
-	if(!section) {
-		return DW_DLV_ERROR;
-	};
-
-	return_section->as_addr = 0; // 0 is ok for non-ELF as per the comments in dwarf_opaque.h.
-	return_section->as_size = section->Misc.VirtualSize;
-	return_section->as_name = reinterpret_cast<const char*>(section->Name);
-	if(return_section->as_name[0] == '/') {
-		/* This is a long string (> 8 characters) in the format "/x", where "x" is an offset of the
-		actual string in the COFF string table. As documented in the PE/COFF doc, the COFF string
-		table is immediately following the COFF symbol table.
-		The "18" multiplier is the size of a COFF symbol. */
-		auto& header = image->FileHeader->FileHeader;
-		return_section->as_name = reinterpret_cast<const char*>(image->MappedAddress +
-			header.PointerToSymbolTable + header.NumberOfSymbols * 18 + atoi(return_section->as_name + 1));
-	}
-	return_section->as_link = 0;
-	return DW_DLV_OK;
-}
-
-Dwarf_Small get_byte_order(void*) {
-	return DW_END_little; // always little-endian on Windows
-}
-
-Dwarf_Small get_length_size(void*) {
-	return 4;
-}
-
-Dwarf_Small get_pointer_size(void*) {
-	return 4;
-}
-
-Dwarf_Unsigned get_section_count(void* obj) {
-	return reinterpret_cast<PLOADED_IMAGE>(obj)->NumberOfSections + 1;
-}
-
-int load_section(void* obj, Dwarf_Unsigned section_index, Dwarf_Small** return_data, int* error) {
-	if(section_index == 0) {
-		return DW_DLV_NO_ENTRY;
+	Dwarf_Attribute rangesAttr = nullptr;
+	if(dwarf_attr(die, DW_AT_ranges, &rangesAttr, &error) != DW_DLV_OK) {
+		return false;
 	}
 
-	auto image = reinterpret_cast<PLOADED_IMAGE>(obj);
-	auto section = image->Sections + section_index - 1;
-	if(!section) {
-		return DW_DLV_ERROR;
-	};
-
-	*return_data = image->MappedAddress + section->PointerToRawData;
-	return DW_DLV_OK;
+	Dwarf_Half version = 0;
+	Dwarf_Half offsetSize = 0;
+	Dwarf_Half form = 0;
+	Dwarf_Off rangesOffset = 0;
+	bool found = false;
+	if(dwarf_get_version_of_die(die, &version, &offsetSize) == DW_DLV_OK &&
+		dwarf_whatform(rangesAttr, &form, &error) == DW_DLV_OK &&
+		dwarf_global_formref(rangesAttr, &rangesOffset, &error) == DW_DLV_OK)
+	{
+		if(version >= 5) {
+			Dwarf_Rnglists_Head head = nullptr;
+			Dwarf_Unsigned count = 0;
+			if(dwarf_rnglists_get_rle_head(rangesAttr, form, rangesOffset, &head, &count, nullptr, &error) == DW_DLV_OK) {
+				for(Dwarf_Unsigned i = 0; i < count && !found; ++i) {
+					unsigned int entryLength = 0;
+					unsigned int entryType = 0;
+					Dwarf_Bool addressUnavailable = false;
+					Dwarf_Unsigned rangeStart = 0;
+					Dwarf_Unsigned rangeEnd = 0;
+					if(dwarf_get_rnglists_entry_fields_a(head, i, &entryLength, &entryType, nullptr, nullptr,
+						&addressUnavailable, &rangeStart, &rangeEnd, &error) == DW_DLV_OK &&
+						!addressUnavailable &&
+						entryType != DW_RLE_end_of_list &&
+						entryType != DW_RLE_base_address &&
+						entryType != DW_RLE_base_addressx)
+					{
+						found = addr >= rangeStart && addr < rangeEnd;
+					}
+				}
+				dwarf_dealloc_rnglists_head(head);
+			}
+		} else {
+			Dwarf_Ranges* ranges = nullptr;
+			Dwarf_Signed count = 0;
+			Dwarf_Unsigned byteCount = 0;
+			Dwarf_Off realOffset = 0;
+			if(dwarf_get_ranges_b(dbg, rangesOffset, die, &realOffset, &ranges, &count, &byteCount, &error) == DW_DLV_OK) {
+				Dwarf_Bool knownBase = false;
+				Dwarf_Bool hasRangesOffset = false;
+				Dwarf_Unsigned baseAddress = 0;
+				Dwarf_Unsigned actualRangesOffset = 0;
+				dwarf_get_ranges_baseaddress(dbg, die, &knownBase, &baseAddress,
+					&hasRangesOffset, &actualRangesOffset, &error);
+				for(Dwarf_Signed i = 0; i < count && !found; ++i) {
+					if(ranges[i].dwr_type == DW_RANGES_ADDRESS_SELECTION) {
+						baseAddress = ranges[i].dwr_addr2;
+					} else if(ranges[i].dwr_type == DW_RANGES_ENTRY) {
+						found = addr >= baseAddress + ranges[i].dwr_addr1 &&
+							addr < baseAddress + ranges[i].dwr_addr2;
+					}
+				}
+				dwarf_dealloc_ranges(dbg, ranges, count);
+			}
+		}
+	}
+	dwarf_dealloc(dbg, rangesAttr, DW_DLA_ATTR);
+	return found;
 }
 
 /* this recursive function browses through the children and siblings of a DIE, looking for the one
@@ -117,41 +147,11 @@ Dwarf_Die browseDIE(Dwarf_Debug dbg, Dwarf_Addr addr, Dwarf_Die die, Dwarf_Error
 
 	/* only care about DIEs that represent functions (section 3.3 of the DWARF 4 spec). */
 	Dwarf_Half tag;
-	if(dwarf_tag(die, &tag, &error) == DW_DLV_OK && (tag == DW_TAG_subprogram || tag == DW_TAG_inlined_subroutine)) {
-
-		/* get the low_pc & high_pc attributes of this DIE to see if it contains the address we are
-		looking for. can't use dwarf_highpc here because that function only accepts absolute
-		high_pc values; however, section 2.17.2 of the DWARF 4 spec mandates that the high_pc value
-		may also be a constant relative to low_pc. */
-		Dwarf_Addr lowpc, highpc;
-		Dwarf_Attribute high_attr;
-		if(dwarf_lowpc(die, &lowpc, &error) == DW_DLV_OK && addr >= lowpc &&
-			dwarf_attr(die, DW_AT_high_pc, &high_attr, &error) == DW_DLV_OK)
-		{
-
-			Dwarf_Half form;
-			if(dwarf_whatform(high_attr, &form, &error) == DW_DLV_OK) {
-				bool got_high = false;
-				if(form == DW_FORM_addr) { // absolute ref, we can use dwarf_highpc.
-					Dwarf_Half high_form = 0;
-					enum Dwarf_Form_Class high_class = DW_FORM_CLASS_UNKNOWN;
-					got_high = dwarf_highpc_b(die, &highpc, &high_form, &high_class, &error) == DW_DLV_OK;
-				} else { // relative ref.
-					Dwarf_Unsigned offset;
-					if(dwarf_formudata(high_attr, &offset, &error) == DW_DLV_OK) {
-						highpc = lowpc + offset;
-						got_high = true;
-					}
-				}
-
-				if(got_high && addr < highpc) {
-					dwarf_dealloc(dbg, high_attr, DW_DLA_ATTR);
-					return die;
-				}
-			}
-
-			dwarf_dealloc(dbg, high_attr, DW_DLA_ATTR);
-		}
+	if(dwarf_tag(die, &tag, &error) == DW_DLV_OK &&
+		(tag == DW_TAG_subprogram || tag == DW_TAG_inlined_subroutine) &&
+		dieContainsAddress(dbg, die, addr, error))
+	{
+		return die;
 	}
 
 	// flow to the next DIE. start with children then move to siblings.
@@ -165,6 +165,7 @@ Dwarf_Die browseDIE(Dwarf_Debug dbg, Dwarf_Addr addr, Dwarf_Die die, Dwarf_Error
 			}
 			return ret;
 		}
+		dwarf_dealloc(dbg, next, DW_DLA_DIE);
 	}
 
 	if(dwarf_siblingof_c(die, &next, &error) == DW_DLV_OK) {
@@ -175,6 +176,7 @@ Dwarf_Die browseDIE(Dwarf_Debug dbg, Dwarf_Addr addr, Dwarf_Die die, Dwarf_Error
 			}
 			return ret;
 		}
+		dwarf_dealloc(dbg, next, DW_DLA_DIE);
 	}
 
 	return 0;
@@ -196,34 +198,10 @@ Dwarf_Die followRef(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half attribute, Dwarf_
 	Dwarf_Die ret = 0;
 	Dwarf_Attribute attr;
 	if(dwarf_attr(die, attribute, &attr, &error) == DW_DLV_OK) {
-
-		Dwarf_Half form;
-		if(dwarf_whatform(attr, &form, &error) == DW_DLV_OK && form == DW_FORM_ref_sig8) {
-			// DWARF 4 pointer to a type DIE in the .debug_types section.
-			Dwarf_Sig8 sig;
-			if(dwarf_formsig8(attr, &sig, &error) == DW_DLV_OK) {
-
-				/* browse through available type DIEs, looking for the one type DIE whose 8-byte
-				signature matches "sig". */
-				Dwarf_Sig8 cu_sig;
-				Dwarf_Unsigned cu_offset = 0, type_offset, next = 0;
-				Dwarf_Die cu_die = nullptr;
-				while(dwarf_next_cu_header_e(dbg, 0, &cu_die, 0, 0, 0, 0, 0, 0, &cu_sig, &type_offset, &next, 0, &error) == DW_DLV_OK) {
-					if(!memcmp(&cu_sig, &sig, sizeof(Dwarf_Sig8))) {
-						dwarf_offdie_b(dbg, cu_offset + type_offset, 0, &ret, &error);
-						dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
-						break;
-					}
-					dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
-					cu_offset = next;
-				}
-			}
-
-		} else {
-			Dwarf_Off offset;
-			if(dwarf_global_formref(attr, &offset, &error) == DW_DLV_OK) {
-				dwarf_offdie_b(dbg, offset, 1, &ret, &error);
-			}
+		Dwarf_Off offset = 0;
+		Dwarf_Bool isInfo = true;
+		if(dwarf_global_formref_b(attr, &offset, &isInfo, &error) == DW_DLV_OK) {
+			dwarf_offdie_b(dbg, offset, isInfo, &ret, &error);
 		}
 
 		dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
@@ -270,30 +248,14 @@ void getDebugInfo(string path, DWORD_PTR addr, string& file, int& line, int& col
 	if(dot != string::npos)
 		path.replace(dot, path.size() - dot, ".pdb");
 
-	auto image = ImageLoad(&path[0], 0);
-	if(!image) {
-		fprintf(f, "[Failed to load the debugging data into memory (error: %lu)] ", GetLastError());
+	// GNU debug companions are PE/COFF images. Native Microsoft PDB files are handled by DbgHelp.
+	if(!isPortableExecutable(path)) {
 		return;
 	}
 
-	Dwarf_Debug dbg;
+	Dwarf_Debug dbg = nullptr;
 	Dwarf_Error error = 0;
-
-	/* initialize libdwarf using the "custom" interface that allows one to read the DWARF
-	information contained in non-ELF files (PE/COFF in our case). */
-	Dwarf_Obj_Access_Methods_a methods = {};
-	methods.om_get_section_info = get_section_info;
-	methods.om_get_byte_order = get_byte_order;
-	methods.om_get_length_size = get_length_size;
-	methods.om_get_pointer_size = get_pointer_size;
-	methods.om_get_filesize = nullptr;
-	methods.om_get_section_count = get_section_count;
-	methods.om_load_section = load_section;
-	methods.om_relocate_a_section = nullptr;
-	methods.om_load_section_a = nullptr;
-	methods.om_finish = nullptr;
-	Dwarf_Obj_Access_Interface_a access = { image, &methods };
-	if(dwarf_object_init_b(&access, 0, 0, DW_GROUPNUMBER_ANY, &dbg, &error) == DW_DLV_OK) {
+	if(dwarf_init_path(path.c_str(), nullptr, 0, DW_GROUPNUMBER_ANY, nullptr, nullptr, &dbg, &error) == DW_DLV_OK) {
 
 		/* use the ".debug_aranges" DWARF section to pinpoint the CU (Compilation Unit) that
 		corresponds to the address we want to find information about. */
@@ -325,14 +287,16 @@ void getDebugInfo(string path, DWORD_PTR addr, string& file, int& line, int& col
 							/* skim through all available statements to find the one that fits best
 							(with an address <= "addr", as close as possible to "addr"). */
 							Dwarf_Line best = 0;
-
-							int delta = 65;
+							Dwarf_Unsigned delta = static_cast<Dwarf_Unsigned>(-1);
 							for(Dwarf_Signed i = 0; i < line_count; ++i) {
 								auto& l = lines[i];
 								Dwarf_Addr lineaddr;
-								if(dwarf_lineaddr(l, &lineaddr, &error) == DW_DLV_OK) {
-									int d = addr - lineaddr;
-									if(d >= 0 && d < delta) {
+								Dwarf_Bool endSequence = false;
+								if(dwarf_lineendsequence(l, &endSequence, &error) == DW_DLV_OK && !endSequence &&
+									dwarf_lineaddr(l, &lineaddr, &error) == DW_DLV_OK && addr >= lineaddr)
+								{
+									Dwarf_Unsigned d = addr - lineaddr;
+									if(d < delta) {
 										best = l;
 										if(d == 0) // found a perfect match.
 											break;
@@ -436,13 +400,17 @@ void getDebugInfo(string path, DWORD_PTR addr, string& file, int& line, int& col
 			dwarf_dealloc(dbg, aranges, DW_DLA_LIST);
 		}
 
-		dwarf_object_finish(dbg);
+		if(error) {
+			fprintf(f, "[libdwarf error: %s] ", dwarf_errmsg(error));
+			dwarf_dealloc_error(dbg, error);
+			error = nullptr;
+		}
+		dwarf_finish(dbg);
 	}
-
-	ImageUnload(image);
 
 	if(error) {
 		fprintf(f, "[libdwarf error: %s] ", dwarf_errmsg(error));
+		dwarf_dealloc_error(nullptr, error);
 	}
 }
 
@@ -526,68 +494,48 @@ inline void writePlatformInfo() {
 
 #ifndef NO_BACKTRACE
 
-inline DWORD_PTR getDefaultBaseAddress(void) {
+inline DWORD64 getPreferredImageBase(const char* path) {
+	std::ifstream file(path, std::ios::binary);
+	if(!file) {
+		return 0;
+	}
 
-	// Open our own EXE image for reading
-	char filePath[MAX_PATH];
-	::GetModuleFileNameA(nullptr, filePath, MAX_PATH);
+	IMAGE_DOS_HEADER dosHeader = {};
+	if(!file.read(reinterpret_cast<char*>(&dosHeader), sizeof(dosHeader)) ||
+		dosHeader.e_magic != IMAGE_DOS_SIGNATURE || dosHeader.e_lfanew < 0)
+	{
+		return 0;
+	}
 
-	std::ifstream file(filePath, std::ios::binary);
-	if (!file) return 0;
-    
-	// Read the DOS header
-	IMAGE_DOS_HEADER dosHeader;
-	file.read((char*)&dosHeader, sizeof(dosHeader));
+	file.seekg(dosHeader.e_lfanew, std::ios::beg);
+	DWORD signature = 0;
+	IMAGE_FILE_HEADER fileHeader = {};
+	if(!file.read(reinterpret_cast<char*>(&signature), sizeof(signature)) ||
+		signature != IMAGE_NT_SIGNATURE ||
+		!file.read(reinterpret_cast<char*>(&fileHeader), sizeof(fileHeader)))
+	{
+		return 0;
+	}
 
-	// Move to the offset of the COFF header
-	file.seekg(dosHeader.e_lfanew + sizeof(DWORD), std::ios::beg);
+	const auto optionalHeaderOffset = file.tellg();
+	WORD magic = 0;
+	if(!file.read(reinterpret_cast<char*>(&magic), sizeof(magic))) {
+		return 0;
+	}
+	file.seekg(optionalHeaderOffset, std::ios::beg);
 
-	// Read the COFF header
-	IMAGE_FILE_HEADER fileHeader;
-	file.read((char*)&fileHeader, sizeof(fileHeader));
-
-	// Read the optional header
-	#ifdef _WIN64
-		IMAGE_OPTIONAL_HEADER64
-	#else   
-		IMAGE_OPTIONAL_HEADER32
-	#endif
-	optionalHeader;
-	file.read((char*)&optionalHeader, sizeof(optionalHeader));
-
-	file.close();
-
-	return optionalHeader.ImageBase;
-
-	/*
-    @todo try to replace the above solution to the following when we already target Win8+. 
-    If works then this one gets the address right from the process rather than from the image
-    using the API and without the need of loading huge .dlls and whatnot...
-
-    // Get the process image information
-    PROCESS_BASIC_INFORMATION pbi;
-    DWORD bytesReturned;
-    if (GetProcessInformation(process, ProcessBasicInformation, &pbi, sizeof(pbi), &bytesReturned)) {
-        // Read the DOS header from the process memory
-        IMAGE_DOS_HEADER dosHeader;
-        SIZE_T bytesRead = 0;
-        if (ReadProcessMemory(process, pbi.PebBaseAddress->Reserved3[1], &dosHeader, sizeof(dosHeader), &bytesRead) && bytesRead == sizeof(dosHeader)) {
-            // Read the COFF header from the process memory
-            IMAGE_FILE_HEADER fileHeader;
-            if (ReadProcessMemory(process, (LPBYTE)pbi.PebBaseAddress->Reserved3[1] + dosHeader.e_lfanew + sizeof(DWORD), &fileHeader, sizeof(fileHeader), &bytesRead) && bytesRead == sizeof(fileHeader)) {
-                // Read the optional header from the process memory
-                IMAGE_OPTIONAL_HEADER optionalHeader;
-                if (ReadProcessMemory(process, (LPBYTE)pbi.PebBaseAddress->Reserved3[1] + dosHeader.e_lfanew + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER), &optionalHeader, sizeof(optionalHeader), &bytesRead) && bytesRead == sizeof(optionalHeader)) {
-                    // Retrieve the default set image base address from the optional header
-                    return (DWORD_PTR)pbi.PebBaseAddress->Reserved3[1] + optionalHeader.ImageBase;
-                }
-            }
-        }
-    }
-
-    return 0;
-	*/
-    
+	if(magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC && fileHeader.SizeOfOptionalHeader >= sizeof(IMAGE_OPTIONAL_HEADER32)) {
+		IMAGE_OPTIONAL_HEADER32 optionalHeader = {};
+		if(file.read(reinterpret_cast<char*>(&optionalHeader), sizeof(optionalHeader))) {
+			return optionalHeader.ImageBase;
+		}
+	} else if(magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC && fileHeader.SizeOfOptionalHeader >= sizeof(IMAGE_OPTIONAL_HEADER64)) {
+		IMAGE_OPTIONAL_HEADER64 optionalHeader = {};
+		if(file.read(reinterpret_cast<char*>(&optionalHeader), sizeof(optionalHeader))) {
+			return optionalHeader.ImageBase;
+		}
+	}
+	return 0;
 }
 
 inline void writeBacktrace(LPCONTEXT context) {
@@ -595,16 +543,6 @@ inline void writeBacktrace(LPCONTEXT context) {
 	HANDLE const thread = GetCurrentThread();
 
 #if defined(__MINGW32__)
-	/* Get the default image base address, the addresses in the debug symbols file are all relative to this.
-	   The linker has a default value set for both archs but it can vary between compiler versions and
-	   toolchain setups so let's just make sure we're using the real value for computing. */
-	DWORD_PTR defaultImageBase = getDefaultBaseAddress();
-
-	if(!defaultImageBase) {
-		fprintf(f, "Failed to get the default image base address\n");
-		return;
-	}
-
 	SymSetOptions(SYMOPT_DEFERRED_LOADS);
 #else
 	SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
@@ -668,13 +606,13 @@ inline void writeBacktrace(LPCONTEXT context) {
 			// LoadedImageName is not always correctly filled in XP... @todo test whether we can safely remove this
 			::GetModuleFileNameA(reinterpret_cast<HMODULE>(module.BaseOfImage), module.LoadedImageName, sizeof(module.LoadedImageName)))
 		{
-			DWORD_PTR dynamicOffset = 0;
-			if (defaultImageBase) {
-				//Correct the address with the offset to the possible dynamic base address if ASLR happened...
-				dynamicOffset = defaultImageBase - reinterpret_cast<DWORD_PTR>(module.BaseOfImage);
+			DWORD64 debugAddress = frame.AddrPC.Offset;
+			const DWORD64 preferredImageBase = getPreferredImageBase(module.LoadedImageName);
+			if(preferredImageBase && frame.AddrPC.Offset >= module.BaseOfImage) {
+				debugAddress = preferredImageBase + (frame.AddrPC.Offset - module.BaseOfImage);
 			}
-			
-			getDebugInfo(module.LoadedImageName, frame.AddrPC.Offset + dynamicOffset, file, line, column, function);
+
+			getDebugInfo(module.LoadedImageName, static_cast<DWORD_PTR>(debugAddress), file, line, column, function);
 		}
 #endif
 

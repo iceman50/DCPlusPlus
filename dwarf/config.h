@@ -8,6 +8,7 @@
 #endif
 
 #define HAVE_INTTYPES_H 1
+#define HAVE_FCNTL_H 1
 #define HAVE_MEMORY_H 1
 #define HAVE_STDINT_H 1
 #define HAVE_STDLIB_H 1

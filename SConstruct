@@ -19,7 +19,7 @@ from build_util import Dev, gen_po_name
 #   -Wno-unused-[parameter / value]: We have a ton of these; maybe one day...
 gcc_flags = {
     "common": [
-        "-gdwarf-4",
+        "-gdwarf-5",
         "-Wall",
         "-Wextra",
         "-Wno-missing-field-initializers",
@@ -95,7 +95,7 @@ gcc_link_flags = {
     # the Dynamic Base bit in the EXE header which satisfies modern Windows'
     # security so the EXE won't be outright blocked. See L#2039677.
     # @todo remove when we drop support for older mingw-w64 builds / versions
-    "common": ["-gdwarf-4", "-Wl,--no-undefined,--nxcompat,--dynamicbase", "-time"],
+    "common": ["-gdwarf-5", "-Wl,--no-undefined,--nxcompat,--dynamicbase", "-time"],
     "debug": [],
     "release": ["-O3"],
 }
@@ -403,8 +403,8 @@ def CheckFlag(context, flag):
 conf = Configure(
     env,
     custom_tests={"CheckFlag": CheckFlag},
-    conf_dir=dev.get_build_path(".sconf_temp"),
-    log_file=dev.get_build_path("config.log"),
+    conf_dir=env.Dir(dev.get_build_path(".sconf_temp")).abspath,
+    log_file=env.File(dev.get_build_path("config.log")).abspath,
     clean=False,
     help=False,
 )
