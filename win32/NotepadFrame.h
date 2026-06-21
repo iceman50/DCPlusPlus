@@ -38,7 +38,7 @@ protected:
 	friend class StaticFrame<NotepadFrame>;
 	friend class MDIChildFrame<NotepadFrame>;
 
-	NotepadFrame(TabViewPtr parent);
+	NotepadFrame(MDIParentPtr parent);
 	virtual ~NotepadFrame();
 
 	void layout();

@@ -27,7 +27,7 @@ public:
 	static const string id;
 	const string& getId() const;
 
-	FinishedDLFrame(TabViewPtr parent);
+	FinishedDLFrame(MDIParentPtr parent);
 	virtual ~FinishedDLFrame() { }
 };
 

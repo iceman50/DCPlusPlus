@@ -40,7 +40,8 @@
 #include <dwt/util/StringConversion.h>
 #include <dwt/util/win32/FileDialog.h>
 #include <dwt/util/win32/Version.h>
-#include <dwt/widgets/Container.h>
+#include <dwt/widgets/Composite.h>
+#include <dwt/widgets/Frame.h>
 #include <dwt/widgets/Window.h>
 
 namespace dwt {
@@ -224,7 +225,7 @@ Taskbar::~Taskbar() {
 		taskbar->Release();
 }
 
-void Taskbar::initTaskbar(WindowPtr window_) {
+void Taskbar::initTaskbar(FramePtr window_) {
 	window = window_;
 	dwtassert(window, "Taskbar: no widget set");
 
@@ -402,7 +403,7 @@ public:
 	Proxy(Widget* parent) : BaseType(parent, NormalDispatcher::getDefault()) { }
 };
 
-void Taskbar::addToTaskbar(ContainerPtr tab) {
+void Taskbar::addToTaskbar(CompositePtr tab) {
 	if(!taskbar || !window) {
 		return;
 	}
@@ -475,7 +476,7 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 	moveOnTaskbar(tab);
 }
 
-void Taskbar::removeFromTaskbar(ContainerPtr tab) {
+void Taskbar::removeFromTaskbar(CompositePtr tab) {
 	auto i = tabs.find(tab);
 	if(i == tabs.end() || !i->second) {
 		return;
@@ -487,7 +488,7 @@ void Taskbar::removeFromTaskbar(ContainerPtr tab) {
 	tabs.erase(i);
 }
 
-void Taskbar::moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor) {
+void Taskbar::moveOnTaskbar(CompositePtr tab, CompositePtr rightNeighbor) {
 	auto i = tabs.find(tab);
 	if(taskbar && i != tabs.end() && i->second) {
 		auto right = rightNeighbor ? tabs.find(rightNeighbor) : tabs.end();
@@ -496,21 +497,21 @@ void Taskbar::moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor) {
 	}
 }
 
-void Taskbar::setActiveOnTaskbar(ContainerPtr tab) {
+void Taskbar::setActiveOnTaskbar(CompositePtr tab) {
 	auto i = tabs.find(tab);
 	if(taskbar && window && i != tabs.end() && i->second) {
 		taskbar->SetTabActive(i->second->handle(), window->handle(), 0);
 	}
 }
 
-void Taskbar::setTaskbarIcon(ContainerPtr tab, const IconPtr& icon) {
+void Taskbar::setTaskbarIcon(CompositePtr tab, const IconPtr& icon) {
 	auto i = tabs.find(tab);
 	if(i != tabs.end() && i->second) {
 		i->second->setSmallIcon(icon);
 	}
 }
 
-void Taskbar::setOverlayIcon(ContainerPtr tab, const IconPtr& icon, const tstring& description) {
+void Taskbar::setOverlayIcon(CompositePtr tab, const IconPtr& icon, const tstring& description) {
 	if(taskbar && window) {
 		taskbar->SetOverlayIcon(window->handle(), icon ? icon->handle() : nullptr,
 			description.c_str());
@@ -562,7 +563,7 @@ void Taskbar::clearThumbnailClip() {
 	}
 }
 
-void Taskbar::addThumbnailToolbarButtons(ContainerPtr tab,
+void Taskbar::addThumbnailToolbarButtons(CompositePtr tab,
 	const std::vector<THUMBBUTTON>& buttons)
 {
 	auto handle = getTaskbarWindow(tab);
@@ -572,7 +573,7 @@ void Taskbar::addThumbnailToolbarButtons(ContainerPtr tab,
 	}
 }
 
-void Taskbar::updateThumbnailToolbarButtons(ContainerPtr tab,
+void Taskbar::updateThumbnailToolbarButtons(CompositePtr tab,
 	const std::vector<THUMBBUTTON>& buttons)
 {
 	auto handle = getTaskbarWindow(tab);
@@ -582,14 +583,14 @@ void Taskbar::updateThumbnailToolbarButtons(ContainerPtr tab,
 	}
 }
 
-void Taskbar::setThumbnailTooltip(ContainerPtr tab, const tstring& tooltip) {
+void Taskbar::setThumbnailTooltip(CompositePtr tab, const tstring& tooltip) {
 	auto handle = getTaskbarWindow(tab);
 	if(taskbar && handle) {
 		taskbar->SetThumbnailTooltip(handle, tooltip.empty() ? nullptr : tooltip.c_str());
 	}
 }
 
-void Taskbar::setThumbnailClip(ContainerPtr tab, const Rectangle& clip) {
+void Taskbar::setThumbnailClip(CompositePtr tab, const Rectangle& clip) {
 	auto handle = getTaskbarWindow(tab);
 	if(taskbar && handle) {
 		auto rect = clip.toRECT();
@@ -597,21 +598,21 @@ void Taskbar::setThumbnailClip(ContainerPtr tab, const Rectangle& clip) {
 	}
 }
 
-void Taskbar::clearThumbnailClip(ContainerPtr tab) {
+void Taskbar::clearThumbnailClip(CompositePtr tab) {
 	auto handle = getTaskbarWindow(tab);
 	if(taskbar && handle) {
 		taskbar->SetThumbnailClip(handle, nullptr);
 	}
 }
 
-void Taskbar::setTabProperties(ContainerPtr tab, STPFLAG properties) {
+void Taskbar::setTabProperties(CompositePtr tab, STPFLAG properties) {
 	auto handle = getTaskbarWindow(tab);
 	if(taskbar4 && handle) {
 		taskbar4->SetTabProperties(handle, properties);
 	}
 }
 
-HWND Taskbar::getTaskbarWindow(ContainerPtr tab) const {
+HWND Taskbar::getTaskbarWindow(CompositePtr tab) const {
 	if(!tab) {
 		return window ? window->handle() : nullptr;
 	}
@@ -622,7 +623,7 @@ HWND Taskbar::getTaskbarWindow(ContainerPtr tab) const {
 	return tab->handle();
 }
 
-BitmapPtr Taskbar::getBitmap(ContainerPtr tab, LPARAM thumbnailSize) {
+BitmapPtr Taskbar::getBitmap(CompositePtr tab, LPARAM thumbnailSize) {
 	UpdateCanvas canvas { tab };
 
 	// get the actual size of the tab.

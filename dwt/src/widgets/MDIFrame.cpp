@@ -66,7 +66,7 @@ bool MDIFrame::handleMessage(const MSG& msg, LRESULT& retVal) {
 	bool handled = BaseType::handleMessage(msg, retVal);
 
 	if(!handled && msg.message == WM_COMMAND && getMDIParent() && getMDIParent()->getActive()) {
-		// Forward commands to the active tab
+		// Forward commands to the active MDI child
 		handled = getMDIParent()->getActive()->handleMessage(msg, retVal);
 	}
 	return handled;

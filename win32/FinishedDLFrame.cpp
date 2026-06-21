@@ -23,7 +23,7 @@
 const string FinishedDLFrame::id = "FinishedDL";
 const string& FinishedDLFrame::getId() const { return id; }
 
-FinishedDLFrame::FinishedDLFrame(TabViewPtr parent) :
+FinishedDLFrame::FinishedDLFrame(MDIParentPtr parent) :
 	BaseType(parent, T_("Finished Downloads"), IDH_FINISHED_DL, IDI_FINISHED_DL)
 {
 }

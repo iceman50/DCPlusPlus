@@ -627,7 +627,7 @@ bool WinUtil::checkCommand(tstring& cmd, tstring& param, tstring& message, tstri
 		}
 	} else if(Util::stricmp(cmd.c_str(), _T("search")) == 0) {
 		if(!param.empty()) {
-			SearchFrame::openWindow(mainWindow->getTabView(), param, SearchManager::TYPE_ANY);
+			SearchFrame::openWindow(mainWindow->getMDI(), param, SearchManager::TYPE_ANY);
 		} else {
 			status = T_("Specify a search string");
 		}
@@ -689,7 +689,7 @@ bool WinUtil::checkCommand(tstring& cmd, tstring& param, tstring& message, tstri
 			status = value ? str(TF_("Download limit set to %1% KiB/s") % value) : T_("Download limit disabled");
 		}
 	} else if(Util::stricmp(cmd.c_str(), _T("about:config")) == 0 || Util::stricmp(cmd.c_str(), _T("ac")) == 0 || Util::stricmp(cmd.c_str(), _T("a:c")) == 0) {
-		ACFrame::openWindow(mainWindow->getTabView());
+		ACFrame::openWindow(mainWindow->getMDI());
 	} else {
 		return false;
 	}
@@ -820,15 +820,15 @@ string WinUtil::makeMagnet(const TTHValue& aHash, const string& aFile, int64_t s
 }
 
 void WinUtil::searchAny(const tstring& aSearch) {
-	SearchFrame::openWindow(mainWindow->getTabView(), aSearch, SearchManager::TYPE_ANY);
+	SearchFrame::openWindow(mainWindow->getMDI(), aSearch, SearchManager::TYPE_ANY);
 }
 
 void WinUtil::searchHash(const TTHValue& aHash) {
-	SearchFrame::openWindow(mainWindow->getTabView(), Text::toT(aHash.toBase32()), SearchManager::TYPE_TTH);
+	SearchFrame::openWindow(mainWindow->getMDI(), Text::toT(aHash.toBase32()), SearchManager::TYPE_TTH);
 }
 
 void WinUtil::searchHub(const tstring& aUrl) {
-	SearchFrame::openWindow(mainWindow->getTabView(), Util::emptyStringT, SearchManager::TYPE_ANY, aUrl);
+	SearchFrame::openWindow(mainWindow->getMDI(), Util::emptyStringT, SearchManager::TYPE_ANY, aUrl);
 }
 
 void WinUtil::addLastDir(const tstring& dir) {
@@ -1532,7 +1532,7 @@ bool WinUtil::parseLink(const tstring& str, bool followExternal) {
 	   Util::stricmp(proto.c_str(), "dchub") == 0 ||
 	   Util::stricmp(proto.c_str(), "nmdcs") == 0 )
 	{
-		HubFrame::openWindow(mainWindow->getTabView(), url);
+		HubFrame::openWindow(mainWindow->getMDI(), url);
 
 		/// @todo parse other params when RFCs for these schemes have been published.
 
@@ -1638,7 +1638,7 @@ bool isFav(const UserPtr& u) {
 
 } // unnamed namespace
 
-void WinUtil::addUserItems(Menu* menu, const HintedUserList& users, TabViewPtr parent, const StringList& dirs) {
+void WinUtil::addUserItems(Menu* menu, const HintedUserList& users, MDIParentPtr parent, const StringList& dirs) {
 	QueueManager* qm = QueueManager::getInstance();
 
 	addUsers(menu, T_("&Get file list"), users, [=](const HintedUser &u, const string& s) {

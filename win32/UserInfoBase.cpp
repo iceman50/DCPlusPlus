@@ -41,7 +41,7 @@ void UserInfoBase::matchQueue() {
 		LogManager::getInstance()->message(e.getError());
 	}
 }
-void UserInfoBase::getList(TabViewPtr parent) {
+void UserInfoBase::getList(MDIParentPtr parent) {
 	try {
 		QueueManager::getInstance()->addList(user, QueueItem::FLAG_CLIENT_VIEW);
 	} catch(const QueueSelfException&) {
@@ -50,7 +50,7 @@ void UserInfoBase::getList(TabViewPtr parent) {
 		LogManager::getInstance()->message(e.getError());
 	}
 }
-void UserInfoBase::browseList(TabViewPtr parent) {
+void UserInfoBase::browseList(MDIParentPtr parent) {
 	if(!user.user->getCID())
 		return;
 	try {
@@ -61,7 +61,7 @@ void UserInfoBase::browseList(TabViewPtr parent) {
 		LogManager::getInstance()->message(e.getError());
 	}
 }
-void UserInfoBase::getOwnList(TabViewPtr parent) {
+void UserInfoBase::getOwnList(MDIParentPtr parent) {
 	try {
 		DirectoryListingFrame::openOwnList(parent);
 	} catch(const Exception& e) {
@@ -72,7 +72,7 @@ void UserInfoBase::addFav() {
 	FavoriteManager::getInstance()->addFavoriteUser(user);
 }
 
-void UserInfoBase::pm(TabViewPtr parent) {
+void UserInfoBase::pm(MDIParentPtr parent) {
 	PrivateFrame::openWindow(parent, user, Util::emptyStringT);
 }
 
@@ -84,7 +84,7 @@ void UserInfoBase::removeFromQueue() {
 	QueueManager::getInstance()->removeSource(user, QueueItem::Source::FLAG_REMOVED);
 }
 
-void UserInfoBase::connectFav(TabViewPtr parent) {
+void UserInfoBase::connectFav(MDIParentPtr parent) {
 	HubFrame::openWindow(parent, user.hint.empty() ? FavoriteManager::getInstance()->getUserURL(user) : user.hint);
 }
 

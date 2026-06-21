@@ -28,7 +28,7 @@ public:
 	static const string id;
 	const string& getId() const;
 
-	FinishedULFrame(TabViewPtr parent);
+	FinishedULFrame(MDIParentPtr parent);
 	virtual ~FinishedULFrame() { }
 };
 

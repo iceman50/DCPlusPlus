@@ -51,7 +51,7 @@ public:
 	const string& getId() const;
 
 protected:
-	UsersFrame(TabViewPtr parent);
+	UsersFrame(MDIParentPtr parent);
 	virtual ~UsersFrame();
 
 	void layout();

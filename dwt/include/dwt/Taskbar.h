@@ -91,9 +91,9 @@ public:
 	static HRESULT commitJumpList(const JumpList& jumpList, UINT* minSlots = nullptr);
 	static HRESULT deleteJumpList(const tstring& appId = tstring());
 
-	void initTaskbar(WindowPtr window_);
+	void initTaskbar(FramePtr window_);
 
-	void setOverlayIcon(ContainerPtr tab, const IconPtr& icon, const tstring& description);
+	void setOverlayIcon(CompositePtr tab, const IconPtr& icon, const tstring& description);
 	void setProgressState(TBPFLAG state);
 	void setProgressValue(ULONGLONG completed, ULONGLONG total);
 	void addThumbnailToolbarButtons(const std::vector<THUMBBUTTON>& buttons);
@@ -101,35 +101,35 @@ public:
 	void setThumbnailTooltip(const tstring& tooltip);
 	void setThumbnailClip(const Rectangle& clip);
 	void clearThumbnailClip();
-	void addThumbnailToolbarButtons(ContainerPtr tab, const std::vector<THUMBBUTTON>& buttons);
-	void updateThumbnailToolbarButtons(ContainerPtr tab, const std::vector<THUMBBUTTON>& buttons);
-	void setThumbnailTooltip(ContainerPtr tab, const tstring& tooltip);
-	void setThumbnailClip(ContainerPtr tab, const Rectangle& clip);
-	void clearThumbnailClip(ContainerPtr tab);
-	void setTabProperties(ContainerPtr tab, STPFLAG properties);
+	void addThumbnailToolbarButtons(CompositePtr tab, const std::vector<THUMBBUTTON>& buttons);
+	void updateThumbnailToolbarButtons(CompositePtr tab, const std::vector<THUMBBUTTON>& buttons);
+	void setThumbnailTooltip(CompositePtr tab, const tstring& tooltip);
+	void setThumbnailClip(CompositePtr tab, const Rectangle& clip);
+	void clearThumbnailClip(CompositePtr tab);
+	void setTabProperties(CompositePtr tab, STPFLAG properties);
 
 protected:
 	Taskbar();
 	virtual ~Taskbar();
 
-	void addToTaskbar(ContainerPtr tab);
-	void removeFromTaskbar(ContainerPtr tab);
-	void moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor = 0);
-	void setActiveOnTaskbar(ContainerPtr tab);
-	void setTaskbarIcon(ContainerPtr tab, const IconPtr& icon);
+	void addToTaskbar(CompositePtr tab);
+	void removeFromTaskbar(CompositePtr tab);
+	void moveOnTaskbar(CompositePtr tab, CompositePtr rightNeighbor = 0);
+	void setActiveOnTaskbar(CompositePtr tab);
+	void setTaskbarIcon(CompositePtr tab, const IconPtr& icon);
 
 	ITaskbarList3* taskbar;
 	ITaskbarList4* taskbar4;
 
 private:
-	BitmapPtr getBitmap(ContainerPtr tab, LPARAM thumbnailSize);
-	HWND getTaskbarWindow(ContainerPtr tab) const;
+	BitmapPtr getBitmap(CompositePtr tab, LPARAM thumbnailSize);
+	HWND getTaskbarWindow(CompositePtr tab) const;
 
 	/// function called when the user activates a tab using the taskbar.
-	virtual void setActive(ContainerPtr) = 0;
+	virtual void setActive(CompositePtr) = 0;
 
-	WindowPtr window;
-	std::unordered_map<ContainerPtr, FramePtr> tabs;
+	FramePtr window;
+	std::unordered_map<CompositePtr, FramePtr> tabs;
 };
 
 }

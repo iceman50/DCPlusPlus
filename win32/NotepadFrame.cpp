@@ -29,7 +29,7 @@ using dwt::GridInfo;
 const string NotepadFrame::id = "Notepad";
 const string& NotepadFrame::getId() const { return id; }
 
-NotepadFrame::NotepadFrame(TabViewPtr parent) :
+NotepadFrame::NotepadFrame(MDIParentPtr parent) :
 	BaseType(parent, T_("Notepad"), IDH_NOTEPAD, IDI_NOTEPAD),
 	pad(0)
 {

@@ -29,6 +29,8 @@
 #include <dcpp/ClientManager.h>
 
 #include <dwt/util/StringUtils.h>
+#include <dwt/widgets/Container.h>
+#include <dwt/widgets/TabView.h>
 
 #include "StaticFrame.h"
 #include "TypedTable.h"
@@ -57,7 +59,7 @@ public:
 		STATUS_LAST
 	};
 
-	static void focusFile(TabViewPtr parent, const string& file) {
+	static void focusFile(MDIParentPtr parent, const string& file) {
 		BaseType::openWindow(parent, false);
 		BaseType::frame->focusFile(file);
 	}
@@ -66,7 +68,7 @@ protected:
 	friend class StaticFrame<T>;
 	friend class MDIChildFrame<T>;
 
-	FinishedFrameBase(TabViewPtr parent, const tstring& title, unsigned helpId, unsigned resourceId) :
+	FinishedFrameBase(MDIParentPtr parent, const tstring& title, unsigned helpId, unsigned resourceId) :
 		BaseType(parent, title, helpId, resourceId),
 		tabs(0),
 		files(0),
@@ -284,11 +286,11 @@ private:
 			}
 		}
 
-		void viewAsText(TabViewPtr parent) {
+		void viewAsText(MDIParentPtr parent) {
 			TextFrame::openWindow(parent, file);
 		}
 
-		void open(TabViewPtr parent, const string& ownList) {
+		void open(MDIParentPtr parent, const string& ownList) {
 			// see if we are opening our own file list.
 			if(in_UL && file == ownList) {
 				DirectoryListingFrame::openOwnList(parent);

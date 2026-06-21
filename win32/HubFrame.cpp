@@ -68,7 +68,7 @@ static const ColumnInfo usersColumns[] = {
 
 decltype(HubFrame::frames) HubFrame::frames;
 
-void HubFrame::openWindow(TabViewPtr parent, string url, bool activate, bool connect) {
+void HubFrame::openWindow(MDIParentPtr parent, string url, bool activate, bool connect) {
 	Util::sanitizeUrl(url);
 
 	if(url.empty()) {
@@ -152,7 +152,7 @@ WindowParams HubFrame::getWindowParams() const {
 	return ret;
 }
 
-void HubFrame::parseWindowParams(TabViewPtr parent, const WindowParams& params) {
+void HubFrame::parseWindowParams(MDIParentPtr parent, const WindowParams& params) {
 	auto address = params.find("Address");
 	if(address != params.end())
 		openWindow(parent, address->second, parseActivateParam(params), params.find("NoConnect") == params.end());
@@ -165,7 +165,7 @@ bool HubFrame::isFavorite(const WindowParams& params) {
 	return false;
 }
 
-HubFrame::HubFrame(TabViewPtr parent, string&& url, bool connect) :
+HubFrame::HubFrame(MDIParentPtr parent, string&& url, bool connect) :
 BaseType(parent, Text::toT(url), IDH_HUB, IDI_HUB_OFF, false),
 paned(0),
 userGrid(0),
@@ -1275,7 +1275,7 @@ bool HubFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 	
 	WinUtil::addSearchMenu(menu.get(), searchText);
 	
-	menu->setTitle(escapeMenu(getText()), getParent()->getIcon(this));
+	menu->setTitle(escapeMenu(getText()), getIcon());
 
 	prepareMenu(menu.get(), UserCommand::CONTEXT_HUB, url);
 
@@ -1309,7 +1309,7 @@ bool HubFrame::handleUsersContextMenu(dwt::ScreenCoordinate pt) {
 	return false;
 }
 
-void HubFrame::tabMenuImpl(dwt::Menu* menu) {
+void HubFrame::windowMenuImpl(dwt::Menu* menu) {
 	if(!FavoriteManager::getInstance()->isFavoriteHub(url)) {
 		menu->appendItem(T_("Add To &Favorites"), [this] { addAsFavorite(); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
 	}

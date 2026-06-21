@@ -46,7 +46,7 @@ static const ColumnInfo itemsColumns[] = {
 	{ N_("Max Size"), 100, true }
 };
 
-ADLSearchFrame::ADLSearchFrame(TabViewPtr parent) :
+ADLSearchFrame::ADLSearchFrame(MDIParentPtr parent) :
 BaseType(parent, T_("Automatic Directory Listing Search"), IDH_ADL_SEARCH, IDI_ADLSEARCH),
 grid(0),
 items(0)
@@ -313,7 +313,7 @@ bool ADLSearchFrame::handleContextMenu(dwt::ScreenCoordinate pt) {
 
 	auto menu = addChild(WinUtil::Seeds::menu);
 	menu->setTitle((sel == 0) ? getText() : (sel == 1) ? escapeMenu(items->getText(items->getSelected(), COLUMN_ACTIVE_SEARCH_STRING)) :
-		str(TF_("%1% items") % sel), getParent()->getIcon(this));
+		str(TF_("%1% items") % sel), getIcon());
 	menu->appendItem(T_("&New..."), [this] { handleAdd(); });
 	menu->appendItem(T_("&Properties"), [this] { handleProperties(); }, dwt::IconPtr(), sel);
 	menu->appendItem(T_("&Remove"), [this] { handleRemove(); }, dwt::IconPtr(), sel);

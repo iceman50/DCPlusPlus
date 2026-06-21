@@ -37,8 +37,11 @@
 #define DWT_MDIParent_h
 
 #include "Control.h"
+#include "../Taskbar.h"
 #include "../util/check.h"
 #include "MDIFrame.h"
+
+#include <vector>
 
 namespace dwt {
 
@@ -64,7 +67,8 @@ class Menu;
   * MDIChild
   */
 class MDIParent :
-	public Control
+	public Control,
+	public Taskbar
 
 {
 	typedef Control BaseType;
@@ -115,19 +119,21 @@ public:
 
 	void closeActive() {
 		if(auto active = getActive()) {
-			this->sendMessage(WM_MDIDESTROY, reinterpret_cast<WPARAM>(active->handle()));
+			active->postMessage(WM_CLOSE);
 		}
 	}
 
-	void closeAll() {
-		for(HWND child = ::GetWindow(handle(), GW_CHILD); child; ) {
-			HWND nextChild = ::GetWindow(child, GW_HWNDNEXT);
-			if(hwnd_cast<Widget*>(child)) {
-				this->sendMessage(WM_MDIDESTROY, reinterpret_cast<WPARAM>(child));
-			}
-			child = nextChild;
-		}
-	}
+	void closeAll();
+
+	std::vector<MDIChildPtr> getChildren() const;
+
+	void destroy(MDIChildPtr child);
+
+	void initTaskbar(FramePtr frame);
+	void registerChild(MDIChildPtr child);
+	void unregisterChild(MDIChildPtr child);
+	void setChildIcon(MDIChildPtr child, const IconPtr& icon);
+	void setActiveChild(MDIChildPtr child);
 
 	void minimizeAll() {
 		for(HWND child = ::GetWindow(handle(), GW_CHILD); child; ) {
@@ -193,6 +199,8 @@ protected:
 	// Protected to avoid direct instantiation, you can inherit and use WidgetFactory class which is friend
 	virtual ~MDIParent();
 private:
+	void setActive(CompositePtr widget) override { setActive(static_cast<Widget*>(widget)); }
+
 	bool handlePaintBackground();
 	bool handleEraseBackground(HDC hdc);
 	void redrawBackground();

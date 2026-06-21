@@ -46,7 +46,7 @@ private:
 	friend class StaticFrame<PublicHubsFrame>;
 	friend class MDIChildFrame<PublicHubsFrame>;
 
-	PublicHubsFrame(TabViewPtr parent);
+	PublicHubsFrame(MDIParentPtr parent);
 	virtual ~PublicHubsFrame();
 
 	enum {

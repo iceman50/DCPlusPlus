@@ -108,7 +108,7 @@ int SearchFrame::SearchInfo::compareItems(const SearchInfo* a, const SearchInfo*
 	}
 }
 
-void SearchFrame::openWindow(TabViewPtr parent, const tstring& str, SearchManager::TypeModes type, const tstring& url) {
+void SearchFrame::openWindow(MDIParentPtr parent, const tstring& str, SearchManager::TypeModes type, const tstring& url) {
 	frames.insert(new SearchFrame(parent, str, type, url));
 }
 
@@ -117,7 +117,7 @@ void SearchFrame::closeAll() {
 		i->close(true);
 }
 
-SearchFrame::SearchFrame(TabViewPtr parent, const tstring& initialString, SearchManager::TypeModes initialType_, const tstring& hubUrl) :
+SearchFrame::SearchFrame(MDIParentPtr parent, const tstring& initialString, SearchManager::TypeModes initialType_, const tstring& hubUrl) :
 BaseType(parent, T_("Search"), IDH_SEARCH, IDI_SEARCH, false),
 paned(0),
 options(0),
@@ -863,7 +863,7 @@ MenuPtr SearchFrame::makeMenu() {
 	SearchInfo::CheckTTH checkTTH = results->forEachSelectedT(SearchInfo::CheckTTH());
 
 	menu->setTitle(checkTTH.hasTTH ? escapeMenu(checkTTH.name) : str(TF_("%1% results") % results->countSelected()),
-		getParent()->getIcon(this));
+		getIcon());
 
 	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, WinUtil::menuIcon(IDI_DOWNLOAD), true, true);
 	addTargetMenu(menu.get(), favoriteDirs, checkTTH);

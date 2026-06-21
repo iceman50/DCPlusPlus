@@ -93,8 +93,12 @@ public:
 	void createMDIChild( const Seed& cs = Seed() );
 
 	void activate();
+	void setSmallIcon(const IconPtr& icon);
+	void setLargeIcon(const IconPtr& icon);
+	const IconPtr& getSmallIcon() const { return smallIcon; }
 
 	MDIParent* getParent() { return static_cast<MDIParent*>(BaseType::getParent()); }
+	const MDIParent* getParent() const { return static_cast<const MDIParent*>(BaseType::getParent()); }
 protected:
 	virtual bool handleMessage(const MSG& msg, LRESULT& retVal);
 
@@ -102,6 +106,10 @@ protected:
 	explicit MDIChild( Widget * parent );
 
 	virtual ~MDIChild();
+
+private:
+	IconPtr smallIcon;
+	IconPtr largeIcon;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -110,10 +118,11 @@ protected:
 
 inline MDIChild::~MDIChild()
 {
+	getParent()->unregisterChild(this);
 }
 
 inline MDIChild::MDIChild( Widget * parent )
-	: BaseType(parent, MDIChildDispatcher::getDefault())
+	: BaseType(parent, MDIChildDispatcher::getDefault()), smallIcon(), largeIcon()
 {}
 
 }

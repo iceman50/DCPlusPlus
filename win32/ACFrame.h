@@ -43,7 +43,7 @@ protected:
 	friend class StaticFrame<ACFrame>;
 	friend class MDIChildFrame<ACFrame>;
 
-	ACFrame(TabViewPtr parent);
+	ACFrame(MDIParentPtr parent);
 	virtual ~ACFrame();
 
 	void layout();

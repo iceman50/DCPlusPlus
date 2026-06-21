@@ -62,7 +62,7 @@ static const ColumnInfo filesColumns[] = {
 	{ N_("Type"), 60, false }
 };
 
-QueueFrame::QueueFrame(TabViewPtr parent) :
+QueueFrame::QueueFrame(MDIParentPtr parent) :
 BaseType(parent, T_("Download Queue"), IDH_QUEUE, IDI_QUEUE),
 toolbar(0),
 rebar(0),
@@ -945,7 +945,7 @@ MenuPtr QueueFrame::makeMultiMenu() {
 	auto menu = addChild(WinUtil::Seeds::menu);
 
 	size_t sel = files->countSelected();
-	menu->setTitle(str(TF_("%1% files") % sel), getParent()->getIcon(this));
+	menu->setTitle(str(TF_("%1% files") % sel), getIcon());
 
 	menu->appendItem(T_("&Move/Rename"), [this] { handleMove(); });
 	menu->appendItem(T_("Re&check integrity"), [this] { handleRecheck(); });
@@ -960,7 +960,7 @@ MenuPtr QueueFrame::makeDirMenu() {
 
 	auto selData = dirs->getSelectedData();
 	menu->setTitle(escapeMenu(selData ? selData->getText() : getText()),
-		selData ? WinUtil::fileImages->getIcon(selData->getImage(0)) : getParent()->getIcon(this));
+		selData ? WinUtil::fileImages->getIcon(selData->getImage(0)) : getIcon());
 
 	addPriorityMenu(menu.get());
 	menu->appendItem(T_("&Move/Rename"), [this] { handleMove(); });

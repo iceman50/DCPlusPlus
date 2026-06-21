@@ -18,13 +18,12 @@
 #ifndef DCPLUSPLUS_WIN32_MDI_CHILD_FRAME_H_
 #define DCPLUSPLUS_WIN32_MDI_CHILD_FRAME_H_
 
-#include <functional>
 #include <string>
 
 #include <dcpp/SettingsManager.h>
 #include <dcpp/WindowInfo.h>
 
-#include <dwt/widgets/Container.h>
+#include <dwt/widgets/MDIChild.h>
 #include <dwt/util/StringUtils.h>
 
 #include "AspectStatus.h"
@@ -35,52 +34,82 @@ using std::string;
 
 using dwt::util::escapeMenu;
 
+class MDIChildFrameBase : public dwt::MDIChild
+{
+protected:
+	explicit MDIChildFrameBase(MDIParentPtr parent) : dwt::MDIChild(parent), icon() { }
+	virtual ~MDIChildFrameBase() { }
+
+public:
+	virtual const string& getId() const {
+		return Util::emptyString;
+	}
+
+	virtual WindowParams getWindowParams() const {
+		return WindowParams();
+	}
+
+	const dwt::IconPtr& getIcon() const {
+		return icon;
+	}
+
+protected:
+	void setWindowIcon(const dwt::IconPtr& icon_) {
+		icon = icon_;
+		setSmallIcon(icon);
+		setLargeIcon(icon);
+	}
+
+private:
+	dwt::IconPtr icon;
+};
+
 template<typename T>
 class MDIChildFrame :
-	public dwt::Container,
+	public MDIChildFrameBase,
 	public AspectStatus<T>
 {
-	typedef dwt::Container BaseType;
+	typedef MDIChildFrameBase BaseType;
 	typedef MDIChildFrame<T> ThisType;
 
 	const T& t() const { return *static_cast<const T*>(this); }
 	T& t() { return *static_cast<T*>(this); }
 
 protected:
-	MDIChildFrame(TabViewPtr tabView, const tstring& title, unsigned helpId = 0, unsigned iconId = 0, bool manageAccels = true) :
-		BaseType(tabView),
+	MDIChildFrame(MDIParentPtr parent, const tstring& title, unsigned helpId = 0, unsigned iconId = 0, bool manageAccels = true) :
+		BaseType(parent),
 		lastFocus(NULL),
 		alwaysSameFocus(false),
+		dirty(false),
 		closing(false)
 	{
-		typename ThisType::Seed cs;
-		cs.style &= ~WS_VISIBLE;
-		cs.caption = title;
-		cs.location = tabView->getClientSize();
-		this->create(cs);
+		dwt::MDIChild::Seed cs(title);
+		cs.activate = false;
+		this->createMDIChild(cs);
 
 		if(helpId)
 			setHelpId(helpId);
 
-		tabView->add(this, iconId ? WinUtil::tabIcon(iconId) : dwt::IconPtr());
+		if(iconId)
+			setIcon(iconId);
 
-		this->onTabContextMenu([this](const dwt::ScreenCoordinate &sc) { return this->handleContextMenu(sc); });
+		this->onContextMenu([this](const dwt::ScreenCoordinate &sc) { return this->handleContextMenu(sc); });
 
 		onClosing([this] { return this->handleClosing(); });
 		onFocus([this] { this->handleFocus(); });
-		onVisibilityChanged([this](bool b) { this->handleVisibilityChanged(b); });
 		onWindowPosChanged([this](const dwt::Rectangle &r) { this->handleSized(r); });
+		this->addCallback(dwt::Message(WM_MDIACTIVATE), [this](const MSG& msg, LRESULT&) -> bool {
+			this->handleActivation(reinterpret_cast<HWND>(msg.lParam) == this->handle());
+			return false;
+		});
 		addDlgCodeMessage(this);
 
 		addAccel(FCONTROL, 'W', [this] { this->close(true); });
-		addAccel(FCONTROL, VK_F4, [this] { this->close(true); });
 		if(manageAccels)
 			initAccels();
 	}
 
-	virtual ~MDIChildFrame() {
-		getParent()->remove(this);
-	}
+	virtual ~MDIChildFrame() { }
 
 	/**
 	 * The first of two close phases, used to disconnect from other threads that might affect this window.
@@ -111,29 +140,26 @@ protected:
 	}
 
 	void setDirty(SettingsManager::BoolSetting setting) {
-		if(SettingsManager::getInstance()->get(setting)) {
-			getParent()->mark(this);
+		if(SettingsManager::getInstance()->get(setting) && !isActive()) {
+			dirty = true;
+			::FlashWindow(handle(), TRUE);
 		}
 	}
 
-	void onTabContextMenu(const std::function<bool (const dwt::ScreenCoordinate&)>& f) {
-		getParent()->onTabContextMenu(this, f);
-	}
-
 	void activate() {
-		getParent()->setActive(this);
+		BaseType::activate();
 	}
 
 	bool isActive() const {
 		return getParent()->getActive() == this;
 	}
 
-	TabViewPtr getParent() const {
-		return static_cast<TabViewPtr>(BaseType::getParent());
+	MDIParentPtr getParent() const {
+		return const_cast<MDIParentPtr>(BaseType::getParent());
 	}
 
 	void setIcon(dwt::IconPtr icon) {
-		getParent()->setIcon(this, icon);
+		setWindowIcon(icon);
 	}
 	void setIcon(unsigned iconId) {
 		setIcon(WinUtil::tabIcon(iconId));
@@ -144,18 +170,10 @@ protected:
 		return i != params.end() && i->second == "1";
 	}
 
-public:
-	virtual const string& getId() const {
-		return Util::emptyString;
-	}
-
-	virtual WindowParams getWindowParams() const {
-		return WindowParams();
-	}
-
 private:
 	HWND lastFocus; // last focused widget
 	bool alwaysSameFocus; // always focus the same widget
+	bool dirty;
 
 	bool closing;
 
@@ -208,8 +226,14 @@ private:
 		}
 	}
 
-	void handleVisibilityChanged(bool b) {
-		if(!b && !alwaysSameFocus) {
+	void handleActivation(bool active) {
+		if(active) {
+			if(dirty) {
+				dirty = false;
+				::FlashWindow(handle(), FALSE);
+			}
+			handleFocus();
+		} else if(!alwaysSameFocus) {
 			// remember the previously focused window.
 			HWND focus = ::GetFocus();
 			if(focus && ::IsChild(t().handle(), focus))
@@ -226,9 +250,9 @@ private:
 	bool handleContextMenu(const dwt::ScreenCoordinate& pt) {
 		auto menu = addChild(WinUtil::Seeds::menu);
 
-		menu->setTitle(escapeMenu(getText()), getParent()->getIcon(this));
+		menu->setTitle(escapeMenu(getText()), getIcon());
 
-		tabMenuImpl(menu.get());
+		windowMenuImpl(menu.get());
 		menu->appendItem(T_("&Close"), [this] { close(true); }, WinUtil::menuIcon(IDI_EXIT));
 
 		menu->open(pt);
@@ -241,19 +265,15 @@ private:
 			// async to make sure all other async calls have been consumed
 			this->callAsync([this] {
 				this->t().postClosing();
-				if(this->getParent()->getActive() == this) {
-					// Prevent flicker by selecting the next tab - WM_DESTROY would already be too late
-					this->getParent()->next();
-				}
-				::DestroyWindow(handle());
+				this->getParent()->destroy(this);
 			});
 			return false;
 		}
 		return false;
 	}
 
-	virtual void tabMenuImpl(dwt::Menu* menu) {
-		// empty on purpose; implement this in the derived class to modify the tab menu.
+	virtual void windowMenuImpl(dwt::Menu* menu) {
+		// empty on purpose; implement this in the derived class to modify the window menu.
 	}
 };
 

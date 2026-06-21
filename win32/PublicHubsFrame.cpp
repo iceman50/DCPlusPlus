@@ -84,7 +84,7 @@ int PublicHubsFrame::HubInfo::compareItems(const HubInfo* a, const HubInfo* b, i
 	}
 }
 
-PublicHubsFrame::PublicHubsFrame(TabViewPtr parent) :
+PublicHubsFrame::PublicHubsFrame(MDIParentPtr parent) :
 BaseType(parent, T_("Public Hubs"), IDH_PUBLIC_HUBS, IDI_PUBLICHUBS, false),
 grid(0),
 upper(0),
@@ -397,7 +397,7 @@ bool PublicHubsFrame::handleContextMenu(dwt::ScreenCoordinate pt) {
 		}
 
 		auto menu = addChild(WinUtil::Seeds::menu);
-		menu->setTitle(escapeMenu(hubs->getSelectedData()->getText(COLUMN_NAME)), getParent()->getIcon(this));
+		menu->setTitle(escapeMenu(hubs->getSelectedData()->getText(COLUMN_NAME)), getIcon());
 		menu->appendItem(T_("&Connect"), [this] { handleConnect(); }, dwt::IconPtr(), true, true);
 		menu->appendItem(T_("Add To &Favorites"), [this] { handleAdd(); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
 		WinUtil::addCopyMenu(menu.get(), hubs);

@@ -46,7 +46,6 @@
 
 #include "AppearancePage.h"
 #include "StylesPage.h"
-#include "TabsPage.h"
 #include "WindowsPage.h"
 
 #include "NotificationsPage.h"
@@ -176,7 +175,6 @@ bool SettingsDialog::initDialog() {
 		{
 			HTREEITEM item = addPage(T_("Appearance"), new AppearancePage(container), IDI_DCPP, TVI_ROOT);
 			addPage(T_("Styles"), new StylesPage(container), IDI_STYLES, item);
-			addPage(T_("Tabs"), new TabsPage(container), IDI_TABS, item);
 			addPage(T_("Windows"), new WindowsPage(container), IDI_WINDOWS, item);
 		}
 

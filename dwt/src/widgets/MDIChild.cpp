@@ -35,7 +35,7 @@
 namespace dwt {
 
 MDIChild::Seed::Seed(const tstring& caption) :
-	BaseType::Seed(caption, WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS, WS_EX_MDICHILD),
+	BaseType::Seed(caption, WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_VISIBLE, WS_EX_MDICHILD),
 	activate(true)
 {
 }
@@ -57,9 +57,25 @@ void MDIChild::createMDIChild( const Seed& cs ) {
 	if(active) {
 		getParent()->sendMessage(WM_MDIACTIVATE, (WPARAM)active);
 	}
+
+	getParent()->registerChild(this);
+}
+
+void MDIChild::setSmallIcon(const IconPtr& icon) {
+	smallIcon = icon;
+	sendMessage(WM_SETICON, ICON_SMALL, smallIcon ? reinterpret_cast<LPARAM>(smallIcon->handle()) : 0);
+	getParent()->setChildIcon(this, smallIcon);
+}
+
+void MDIChild::setLargeIcon(const IconPtr& icon) {
+	largeIcon = icon;
+	sendMessage(WM_SETICON, ICON_BIG, largeIcon ? reinterpret_cast<LPARAM>(largeIcon->handle()) : 0);
 }
 
 bool MDIChild::handleMessage(const MSG& msg, LRESULT& retVal) {
+	if(msg.message == WM_MDIACTIVATE && reinterpret_cast<HWND>(msg.lParam) == handle()) {
+		getParent()->setActiveChild(this);
+	}
 	return BaseType::handleMessage(msg, retVal);
 }
 
