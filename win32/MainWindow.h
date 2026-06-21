@@ -156,6 +156,7 @@ private:
 	ViewIndexes viewIndexes; /// indexes of menu commands of the "View" menu that open static windows
 
 	bool tray_pm;
+	bool syncingWindowTabs;
 	unordered_map<UserPtr, UserConnection*, User::Hash> ccpms;
 	CriticalSection ccpmMutex;
 

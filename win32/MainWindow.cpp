@@ -106,6 +106,7 @@ MainWindow::MainWindow() :
 	transfers(0),
 	toolbar(0),
 tray_pm(false),
+syncingWindowTabs(false),
 geoRegion(GeoRegion_Idle),
 geoStaticServe(false),
 stopperThread(NULL),
@@ -674,10 +675,18 @@ void MainWindow::initWindowTabs() {
 	seed.ctrlTab = true;
 	mdiTabs = addChild(seed);
 
-	mdiTabs->onSelectionChanged([this] {
-		auto selected = mdiTabs->getActive();
+	mdiTabs->onActiveChanged([this](dwt::CompositePtr selected) {
+		if(syncingWindowTabs) {
+			return;
+		}
+
 		if(selected) {
-			getMDI()->setActive(static_cast<dwt::Widget*>(selected));
+			auto widget = static_cast<dwt::Widget*>(selected);
+			if(::IsIconic(widget->handle())) {
+				getMDI()->sendMessage(WM_MDIRESTORE, reinterpret_cast<WPARAM>(widget->handle()));
+			}
+			getMDI()->sendMessage(WM_MDIACTIVATE, reinterpret_cast<WPARAM>(widget->handle()));
+			::SetFocus(widget->handle());
 		}
 	});
 
@@ -1222,6 +1231,13 @@ void MainWindow::syncWindowTabs() {
 		return;
 	}
 
+	if(syncingWindowTabs) {
+		return;
+	}
+
+	syncingWindowTabs = true;
+	auto resetSync = dcpp::makeScopedFunctor([this] { syncingWindowTabs = false; });
+
 	const auto mdiChildren = getMDI()->getChildren();
 	auto tabChildren = mdiTabs->getChildren();
 
@@ -1243,6 +1259,59 @@ void MainWindow::syncWindowTabs() {
 				icon = frame->getIcon();
 			}
 			mdiTabs->add(child, icon);
+			mdiTabs->onTabContextMenu(child, [this, child](dwt::ScreenCoordinate pt) {
+				auto menu = addChild(WinUtil::Seeds::menu);
+				auto hub = dynamic_cast<HubFrame*>(child);
+				auto pm = dynamic_cast<PrivateFrame*>(child);
+				auto list = dynamic_cast<DirectoryListingFrame*>(child);
+
+				const auto active = getMDI()->getActive();
+				menu->appendItem(T_("Activate"), [this, child] {
+					getMDI()->setActive(static_cast<dwt::Widget*>(child));
+				}, nullptr, active != child);
+
+				menu->appendSeparator();
+
+				menu->appendItem(T_("Close"), [child] { child->close(); }, WinUtil::menuIcon(IDI_EXIT));
+				menu->appendItem(T_("Close other windows"), [this, child] {
+					const auto windows = getMDI()->getChildren();
+					for(auto wnd : windows) {
+						if(wnd != child) {
+							wnd->close();
+						}
+					}
+				}, WinUtil::menuIcon(IDI_EXIT));
+				menu->appendItem(T_("Close all windows"), [this] { getMDI()->closeAll(); }, WinUtil::menuIcon(IDI_EXIT));
+
+				if(hub) {
+					menu->appendSeparator();
+					menu->appendItem(T_("Reconnect disconnected hubs"), &HubFrame::reconnectDisconnected, WinUtil::menuIcon(IDI_RECONNECT));
+					menu->appendSeparator();
+					menu->appendItem(T_("Close all hubs"), [] { HubFrame::closeAll(false); }, WinUtil::menuIcon(IDI_HUB));
+					menu->appendItem(T_("Close disconnected hubs"), [] { HubFrame::closeAll(true); }, WinUtil::menuIcon(IDI_HUB_OFF));
+					menu->appendItem(T_("Close all hubs of a favorite group"), [this] { handleCloseFavGroup(false); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+					menu->appendItem(T_("Close hubs not in a favorite group"), [this] { handleCloseFavGroup(true); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+
+					menu->appendSeparator();
+					hub->windowMenuImpl(menu.get());
+				} else if(pm) {
+					menu->appendSeparator();
+					menu->appendItem(T_("Close all PM windows"), [] { PrivateFrame::closeAll(false); }, WinUtil::menuIcon(IDI_PRIVATE));
+					menu->appendItem(T_("Close all offline PM windows"), [] { PrivateFrame::closeAll(true); }, WinUtil::menuIcon(IDI_PRIVATE_OFF));
+
+					menu->appendSeparator();
+					pm->windowMenuImpl(menu.get());
+				} else if(list) {
+					menu->appendSeparator();
+					menu->appendItem(T_("Close all file list windows"), &DirectoryListingFrame::closeAll, WinUtil::menuIcon(IDI_DIRECTORY));
+
+					menu->appendSeparator();
+					list->windowMenuImpl(menu.get());
+				}
+
+				menu->open(pt, TPM_LEFTBUTTON | TPM_RIGHTBUTTON);
+				return true;
+			});
 		}
 
 		if(auto frame = dynamic_cast<MDIChildFrameBase*>(child)) {

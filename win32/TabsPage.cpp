@@ -20,6 +20,7 @@
 
 #include <dcpp/SettingsManager.h>
 
+#include <dwt/widgets/CheckBox.h>
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/RadioButton.h>
 #include <dwt/widgets/Slider.h>
@@ -29,6 +30,7 @@
 
 using dwt::Grid;
 using dwt::GridInfo;
+using dwt::CheckBox;
 using dwt::RadioButton;
 using dwt::Slider;
 
@@ -45,13 +47,14 @@ PropPage::ListItem TabsPage::listItems[] = {
 };
 
 TabsPage::TabsPage(dwt::Widget* parent) :
-PropPage(parent, 4, 1),
+PropPage(parent, 5, 1),
 dcppDraw(0),
 buttonStyle(0),
 themeGroup(0),
 browserTheme(0),
 tabWidth(0),
 previewGrid(0),
+toggleActive(0),
 options(0)
 {
 	setHelpId(IDH_TABSPAGE);
@@ -59,6 +62,8 @@ options(0)
 	grid->column(0).mode = GridInfo::FILL;
 	grid->row(3).mode = GridInfo::FILL;
 	grid->row(3).align = GridInfo::STRETCH;
+	grid->row(4).mode = GridInfo::FILL;
+	grid->row(4).align = GridInfo::STRETCH;
 
 	{
 		GridPtr cur = grid->addChild(Grid::Seed(1, 3));
@@ -122,6 +127,12 @@ options(0)
 	}
 
 	{
+		toggleActive = grid->addChild(CheckBox::Seed(T_("Switch to the next window tab if the selected tab is already active")));
+		toggleActive->setHelpId(IDH_SETTINGS_WINDOWS_TOGGLE_ACTIVE_WINDOW);
+		toggleActive->setChecked(SETTING(TOGGLE_ACTIVE_WINDOW));
+	}
+
+	{
 		GroupBoxPtr group = grid->addChild(GroupBox::Seed(T_("Preview")));
 		group->setHelpId(IDH_SETTINGS_TAB_PREVIEW);
 
@@ -153,6 +164,7 @@ void TabsPage::write() {
 	SettingsManager::getInstance()->set(SettingsManager::TAB_STYLE, tabStyle);
 
 	SettingsManager::getInstance()->set(SettingsManager::TAB_WIDTH, tabWidth->getPosition());
+	SettingsManager::getInstance()->set(SettingsManager::TOGGLE_ACTIVE_WINDOW, toggleActive->getChecked());
 
 	PropPage::write(options);
 }

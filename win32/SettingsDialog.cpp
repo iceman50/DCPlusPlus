@@ -46,6 +46,7 @@
 
 #include "AppearancePage.h"
 #include "StylesPage.h"
+#include "TabsPage.h"
 #include "WindowsPage.h"
 
 #include "NotificationsPage.h"
@@ -67,7 +68,7 @@ using dwt::GridInfo;
 
 using dwt::ToolTip;
 
-const int SettingsDialog::pluginPagePos = 23; // remember to change when adding pages...
+const int SettingsDialog::pluginPagePos = 24; // remember to change when adding pages...
 
 SettingsDialog::SettingsDialog(dwt::Widget* parent) :
 dwt::ModalDialog(parent),
@@ -138,15 +139,15 @@ bool SettingsDialog::initDialog() {
 		auto container = cur->addChild(dwt::ScrolledContainer::Seed(WS_BORDER));
 
 		const size_t setting = SETTING(SETTINGS_PAGE);
-		auto addPage = [&](const tstring& title, PropPage* page, unsigned icon, HTREEITEM parent) -> HTREEITEM {
-			auto index = static_cast<int>(pages.size());
+			auto addPage = [&](const tstring& title, PropPage* page, unsigned icon, HTREEITEM parent) -> HTREEITEM {
+				auto index = static_cast<int>(pages.size());
 			images->add(dwt::Icon(icon, size));
 			page->onVisibilityChanged([=](bool b) { if(b) {
 				setSmallIcon(WinUtil::createIcon(icon, 16));
 				setLargeIcon(WinUtil::createIcon(icon, 32));
 			} });
 			auto item = tree->insert(title, parent, TVI_LAST, 0, true, index);
-			if(index == setting)
+				if(static_cast<size_t>(index) == setting)
 				callAsync([=] { tree->setSelected(item); tree->ensureVisible(item); });
 			pages.emplace_back(page, item);
 			return item;
@@ -175,6 +176,7 @@ bool SettingsDialog::initDialog() {
 		{
 			HTREEITEM item = addPage(T_("Appearance"), new AppearancePage(container), IDI_DCPP, TVI_ROOT);
 			addPage(T_("Styles"), new StylesPage(container), IDI_STYLES, item);
+			addPage(T_("Tabs"), new TabsPage(container), IDI_TABS, item);
 			addPage(T_("Windows"), new WindowsPage(container), IDI_WINDOWS, item);
 		}
 

@@ -35,6 +35,7 @@ private:
 	RadioButtonPtr browserTheme;
 	SliderPtr tabWidth;
 	GridPtr previewGrid;
+	CheckBoxPtr toggleActive;
 
 	static ListItem listItems[];
 	TablePtr options;

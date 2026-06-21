@@ -277,7 +277,7 @@ void TabView::add(CompositePtr w, const IconPtr& icon) {
 
 	viewOrder.push_front(w);
 
-	if(viewOrder.size() == 1 || w->hasStyle(WS_VISIBLE)) {
+	if(manageVisibility && (viewOrder.size() == 1 || w->hasStyle(WS_VISIBLE))) {
 		if(viewOrder.size() > 1) {
 			swapWidgets(viewOrder.back(), w);
 		} else {
@@ -386,8 +386,14 @@ void TabView::setActive(int i) {
 	if(i == -1)
 		return;
 
+	const int oldSelected = getSelected();
+
 	setSelected(i);
 	handleTabSelected();
+
+	if(i != oldSelected && activeChangedFunction) {
+		activeChangedFunction(getActive());
+	}
 }
 
 bool TabView::activateLeftTab() {
@@ -413,8 +419,8 @@ void TabView::swapWidgets(CompositePtr oldW, CompositePtr newW) {
 		if(oldW) {
 			oldW->setVisible(false);
 		}
+		newW->setFocus();
 	}
-	newW->setFocus();
 }
 
 void TabView::handleTabSelected() {

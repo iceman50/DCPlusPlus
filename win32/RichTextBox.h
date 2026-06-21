@@ -47,6 +47,7 @@ public:
 	void create(const Seed& seed);
 
 	bool handleMessage(const MSG& msg, LRESULT& retVal);
+	MenuPtr getMenu() override { return BaseType::getMenu(); }
 
 	MenuPtr getMenu(const tstring& searchText);
 

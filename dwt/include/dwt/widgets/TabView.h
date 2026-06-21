@@ -60,6 +60,7 @@ class TabView :
 	friend class aspects::Selection<TabView, int>;
 	friend class WidgetCreator< TabView >;
 	typedef std::function<void (const tstring&)> TitleChangedFunction;
+	typedef std::function<void (CompositePtr)> ActiveChangedFunction;
 	typedef std::function<bool (const ScreenCoordinate&)> ContextMenuFunction;
 
 	using aspects::Caption<TabView>::setText;
@@ -115,6 +116,10 @@ public:
 
 	void onTitleChanged(const TitleChangedFunction& f) {
 		titleChangedFunction = f;
+	}
+
+	void onActiveChanged(const ActiveChangedFunction& f) {
+		activeChangedFunction = f;
 	}
 
 	void onTabContextMenu(CompositePtr w, const ContextMenuFunction& f);
@@ -176,6 +181,7 @@ private:
 	ToolTipPtr tip;
 
 	TitleChangedFunction titleChangedFunction;
+	ActiveChangedFunction activeChangedFunction;
 
 	// these can be set through the Seed
 	unsigned widthConfig;

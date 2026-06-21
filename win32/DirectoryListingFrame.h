@@ -56,6 +56,8 @@ class DirectoryListingFrame :
 
 	using IRecent<DirectoryListingFrame>::setText;
 
+	friend class MainWindow;
+
 	friend class FileListLoader;
 
 public:

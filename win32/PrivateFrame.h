@@ -50,6 +50,8 @@ class PrivateFrame :
 
 	using IRecent<PrivateFrame>::setText;
 
+	friend class MainWindow;
+
 public:
 	enum Status {
 		STATUS_STATUS,
