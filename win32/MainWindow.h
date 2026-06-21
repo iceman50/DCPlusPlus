@@ -144,6 +144,7 @@ private:
 	RebarPtr rebar;
 	SplitterContainerPtr paned;
 	ContainerPtr mdiPane;
+	TabViewPtr mdiTabs;
 	MenuPtr mainMenu;
 	Menu* pluginMenu;
 	Menu* viewMenu;
@@ -187,6 +188,7 @@ private:
 	void initToolbar();
 	void initStatusBar();
 	void initMDI();
+	void initWindowTabs();
 	void initTransfers();
 	void initTray();
 
@@ -235,6 +237,8 @@ private:
 
 	void openWindow(const string& id, const WindowParams& params);
 	void syncMDIClientBounds();
+	void syncWindowTabs();
+	int getWindowTabsHeight() const;
 	void layout();
 	void updateStatus();
 	void updateAwayStatus();

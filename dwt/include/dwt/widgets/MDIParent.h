@@ -41,6 +41,7 @@
 #include "../util/check.h"
 #include "MDIFrame.h"
 
+#include <functional>
 #include <vector>
 
 namespace dwt {
@@ -74,6 +75,9 @@ class MDIParent :
 	typedef Control BaseType;
 	friend class WidgetCreator< MDIParent >;
 public:
+	typedef std::function<void(MDIChildPtr)> ChildFunction;
+	typedef std::function<void(MDIChildPtr, const IconPtr&)> ChildIconFunction;
+
 	/// Class type
 	typedef MDIParent ThisType;
 
@@ -132,6 +136,9 @@ public:
 	void initTaskbar(FramePtr frame);
 	void registerChild(MDIChildPtr child);
 	void unregisterChild(MDIChildPtr child);
+	void onChildRegistered(const ChildFunction& f) { childRegistered = f; }
+	void onChildUnregistered(const ChildFunction& f) { childUnregistered = f; }
+	void onChildIconChanged(const ChildIconFunction& f) { childIconChanged = f; }
 	void setChildIcon(MDIChildPtr child, const IconPtr& icon);
 	void setActiveChild(MDIChildPtr child);
 
@@ -207,6 +214,9 @@ private:
 
 	Application::FilterIter acceleratorFilter;
 	bool hasAcceleratorFilter;
+	ChildFunction childRegistered;
+	ChildFunction childUnregistered;
+	ChildIconFunction childIconChanged;
 	COLORREF backgroundColor;
 	BitmapPtr backgroundImage;
 	IconPtr backgroundIcon;
@@ -220,6 +230,9 @@ inline MDIParent::MDIParent( Widget * parent )
 	: BaseType(parent, MDIClientDispatcher::getDefault()),
 	acceleratorFilter(),
 	hasAcceleratorFilter(false),
+	childRegistered(),
+	childUnregistered(),
+	childIconChanged(),
 	backgroundColor(::GetSysColor(COLOR_APPWORKSPACE)),
 	backgroundImage(),
 	backgroundIcon()

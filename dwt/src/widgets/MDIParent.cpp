@@ -143,16 +143,25 @@ void MDIParent::initTaskbar(FramePtr frame)
 void MDIParent::registerChild(MDIChildPtr child)
 {
 	addToTaskbar(child);
+	if(childRegistered) {
+		childRegistered(child);
+	}
 }
 
 void MDIParent::unregisterChild(MDIChildPtr child)
 {
 	removeFromTaskbar(child);
+	if(childUnregistered) {
+		childUnregistered(child);
+	}
 }
 
 void MDIParent::setChildIcon(MDIChildPtr child, const IconPtr& icon)
 {
 	setTaskbarIcon(child, icon);
+	if(childIconChanged) {
+		childIconChanged(child, icon);
+	}
 }
 
 void MDIParent::setActiveChild(MDIChildPtr child)

@@ -51,6 +51,7 @@
 #include <dwt/widgets/Rebar.h>
 #include <dwt/widgets/Spinner.h>
 #include <dwt/widgets/SplitterContainer.h>
+#include <dwt/widgets/TabView.h>
 #include <dwt/widgets/ToolBar.h>
 
 #include "ACFrame.h"
@@ -141,6 +142,7 @@ fullSlots(false)
 	initToolbar();
 	initStatusBar();
 	initTransfers();
+	initWindowTabs();
 	initTray();
 
 	addAccel(FCONTROL, '0', [this] { switchMenuBar(); });
@@ -643,6 +645,13 @@ void MainWindow::initMDI() {
 	dcdebug("initMDI\n");
 	mdiPane = paned->addChild(Container::Seed());
 	mdiPane->onSized([this](const dwt::SizedEvent&) { syncMDIClientBounds(); });
+	getMDI()->onChildRegistered([this](dwt::MDIChildPtr) { syncWindowTabs(); });
+	getMDI()->onChildUnregistered([this](dwt::MDIChildPtr) { syncWindowTabs(); });
+	getMDI()->onChildIconChanged([this](dwt::MDIChildPtr child, const dwt::IconPtr& icon) {
+		if(mdiTabs && child) {
+			mdiTabs->setIcon(child, icon);
+		}
+	});
 	getMDI()->onHelp(&WinUtil::help);
 	if(SETTING(ENABLE_TASKBAR_PREVIEW))
 		getMDI()->initTaskbar(this);
@@ -656,6 +665,23 @@ void MainWindow::initTransfers() {
 	transfers = new TransferView(paned, getMDI());
 
 	viewMenu->checkItem(viewIndexes["Transfers"], true);
+}
+
+void MainWindow::initWindowTabs() {
+	TabView::Seed seed = WinUtil::Seeds::tabs;
+	seed.location = dwt::Rectangle(getClientSize());
+	seed.manageVisibility = false;
+	seed.ctrlTab = true;
+	mdiTabs = addChild(seed);
+
+	mdiTabs->onSelectionChanged([this] {
+		auto selected = mdiTabs->getActive();
+		if(selected) {
+			getMDI()->setActive(static_cast<dwt::Widget*>(selected));
+		}
+	});
+
+	syncWindowTabs();
 }
 
 void MainWindow::initTray() {
@@ -1168,8 +1194,65 @@ void MainWindow::layout() {
 		r.size.y -= status->refresh();
 	}
 
+	if(mdiTabs) {
+		const auto tabsHeight = getWindowTabsHeight();
+		dwt::Rectangle tabsRect = r;
+		auto availableHeight = static_cast<int>(tabsRect.size.y);
+		auto clampedTabsHeight = std::min(availableHeight, tabsHeight);
+		tabsRect.pos.y += std::max(0, availableHeight - clampedTabsHeight);
+		tabsRect.size.y = clampedTabsHeight;
+
+		mdiTabs->resize(tabsRect);
+		mdiTabs->setVisible(true);
+
+		r.size.y -= tabsRect.size.y;
+	}
+
 	paned->resize(r);
+	syncWindowTabs();
 	syncMDIClientBounds();
+}
+
+int MainWindow::getWindowTabsHeight() const {
+	return std::max(::GetSystemMetrics(SM_CYSMICON) + 10, 24);
+}
+
+void MainWindow::syncWindowTabs() {
+	if(!mdiTabs || !getMDI()) {
+		return;
+	}
+
+	const auto mdiChildren = getMDI()->getChildren();
+	auto tabChildren = mdiTabs->getChildren();
+
+	for(auto tabChild : tabChildren) {
+		auto it = std::find_if(mdiChildren.begin(), mdiChildren.end(), [tabChild](auto child) {
+			return child == tabChild;
+		});
+		if(it == mdiChildren.end()) {
+			mdiTabs->remove(tabChild);
+		}
+	}
+
+	tabChildren = mdiTabs->getChildren();
+	for(auto child : mdiChildren) {
+		auto tabIt = std::find(tabChildren.begin(), tabChildren.end(), static_cast<dwt::CompositePtr>(child));
+		if(tabIt == tabChildren.end()) {
+			dwt::IconPtr icon;
+			if(auto frame = dynamic_cast<MDIChildFrameBase*>(child)) {
+				icon = frame->getIcon();
+			}
+			mdiTabs->add(child, icon);
+		}
+
+		if(auto frame = dynamic_cast<MDIChildFrameBase*>(child)) {
+			mdiTabs->setIcon(child, frame->getIcon());
+		}
+	}
+
+	if(auto active = getMDI()->getActive()) {
+		mdiTabs->setActive(static_cast<dwt::CompositePtr>(active));
+	}
 }
 
 void MainWindow::syncMDIClientBounds() {
@@ -1343,6 +1426,9 @@ void MainWindow::handleSettings() {
 	auto prevFont = SETTING(MAIN_FONT);
 	auto prevUploadFont = SETTING(UPLOAD_FONT);
 	auto prevDownloadFont = SETTING(DOWNLOAD_FONT);
+	auto prevTabStyle = SETTING(TAB_STYLE);
+	auto prevTabWidth = SETTING(TAB_WIDTH);
+	auto prevToggleActiveWindow = SETTING(TOGGLE_ACTIVE_WINDOW);
 
 	auto prevTray = SETTING(ALWAYS_TRAY);
 	auto prevSortFavUsersFirst = SETTING(SORT_FAVUSERS_FIRST);
@@ -1405,6 +1491,18 @@ void MainWindow::handleSettings() {
 		}
 		if(SETTING(DOWNLOAD_FONT) != prevDownloadFont) {
 			WinUtil::updateDownloadFont();
+		}
+
+		if(SETTING(TAB_STYLE) != prevTabStyle || SETTING(TAB_WIDTH) != prevTabWidth ||
+			SETTING(TOGGLE_ACTIVE_WINDOW) != prevToggleActiveWindow)
+		{
+			WinUtil::initSeeds();
+			if(mdiTabs) {
+				mdiTabs->close();
+				mdiTabs = nullptr;
+				initWindowTabs();
+				layout();
+			}
 		}
 
 		bool newColors = false;
@@ -2046,7 +2144,10 @@ bool MainWindow::handleMessage(const MSG& msg, LRESULT& retVal) {
 
 	auto handled = dwt::MDIFrame::handleMessage(msg, retVal);
 
-	if(msg.message == WM_MDIACTIVATE || msg.message == WM_MDISETMENU || msg.message == WM_MDIREFRESHMENU) {
+	if(msg.message == WM_MDIACTIVATE || msg.message == WM_MDISETMENU || msg.message == WM_MDIREFRESHMENU ||
+		msg.message == WM_MDICREATE || msg.message == WM_MDIDESTROY)
+	{
+		syncWindowTabs();
 		::DrawMenuBar(handle());
 	}
 

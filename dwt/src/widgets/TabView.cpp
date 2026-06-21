@@ -56,7 +56,8 @@ font(0),
 widthConfig(widthConfig_),
 toggleActive(toggleActive_),
 ctrlTab(ctrlTab_),
-closeable(true)
+closeable(true),
+manageVisibility(true)
 {
 }
 
@@ -68,6 +69,7 @@ toggleActive(false),
 closeable(true),
 font(0),
 boldFont(0),
+manageVisibility(true),
 inTab(false),
 highlighted(-1),
 highlightClose(false),
@@ -174,6 +176,7 @@ void TabView::create(const Seed & cs) {
 	widthConfig = cs.widthConfig;
 	toggleActive = cs.toggleActive;
 	closeable = cs.closeable;
+	manageVisibility = cs.manageVisibility;
 
 	if (!TabCtrl_SetItemExtra(handle(), sizeof(TCITEMEXTRADATA))) {
 		throw Win32Exception("Error while trying to set extra tab item data size");
@@ -242,7 +245,7 @@ void TabView::create(const Seed & cs) {
 	});
 }
 
-void TabView::add(ContainerPtr w, const IconPtr& icon) {
+void TabView::add(CompositePtr w, const IconPtr& icon) {
 	const size_t pos = size();
 
 	TabInfo* ti = new TabInfo(this, w, icon);
@@ -289,12 +292,12 @@ void TabView::add(ContainerPtr w, const IconPtr& icon) {
 	w->onTextChanging([this, w](const tstring& t) { handleTextChanging(w, t); });
 }
 
-ContainerPtr TabView::getActive() const {
+CompositePtr TabView::getActive() const {
 	TabInfo* ti = getTabInfo(getSelected());
 	return ti ? ti->w : 0;
 }
 
-void TabView::remove(ContainerPtr w) {
+void TabView::remove(CompositePtr w) {
 	auto i = findTab(w);
 	if(i == -1) {
 		return;
@@ -336,12 +339,12 @@ void TabView::remove(ContainerPtr w) {
 	raiseAccessibleStructureChanged();
 }
 
-IconPtr TabView::getIcon(ContainerPtr w) const {
+IconPtr TabView::getIcon(CompositePtr w) const {
 	auto ti = getTabInfo(w);
 	return ti ? ti->icon : 0;
 }
 
-void TabView::setIcon(ContainerPtr w, const IconPtr& icon) {
+void TabView::setIcon(CompositePtr w, const IconPtr& icon) {
 	auto i = findTab(w);
 	auto ti = getTabInfo(i);
 	if(ti) {
@@ -360,7 +363,7 @@ void TabView::setIcon(ContainerPtr w, const IconPtr& icon) {
 	}
 }
 
-void TabView::onTabContextMenu(ContainerPtr w, const ContextMenuFunction& f) {
+void TabView::onTabContextMenu(CompositePtr w, const ContextMenuFunction& f) {
 	TabInfo* ti = getTabInfo(w);
 	if(ti) {
 		ti->handleContextMenu = f;
@@ -375,12 +378,8 @@ const TabView::ChildList TabView::getChildren() const {
 	return ret;
 }
 
-void TabView::setActive(ContainerPtr w) {
-	setActive(findTab(w));
-}
-
 void TabView::setActive(CompositePtr w) {
-	setActive(dynamic_cast<ContainerPtr>(w));
+	setActive(findTab(w));
 }
 
 void TabView::setActive(int i) {
@@ -407,11 +406,13 @@ bool TabView::activateRightTab() {
 	return false;
 }
 
-void TabView::swapWidgets(ContainerPtr oldW, ContainerPtr newW) {
-	newW->resize(clientSize);
-	newW->setVisible(true);
-	if(oldW) {
-		oldW->setVisible(false);
+void TabView::swapWidgets(CompositePtr oldW, CompositePtr newW) {
+	if(manageVisibility) {
+		newW->resize(clientSize);
+		newW->setVisible(true);
+		if(oldW) {
+			oldW->setVisible(false);
+		}
 	}
 	newW->setFocus();
 }
@@ -453,7 +454,7 @@ void TabView::handleTabSelected() {
 		reinterpret_cast<accessibility::ItemId>(ti->w), 20012);
 }
 
-void TabView::mark(ContainerPtr w) {
+void TabView::mark(CompositePtr w) {
 	int i = findTab(w);
 	if(i != -1 && i != getSelected()) {
 		bool& marked = getTabInfo(w)->marked;
@@ -468,7 +469,7 @@ void TabView::mark(ContainerPtr w) {
 	}
 }
 
-int TabView::findTab(ContainerPtr w) const {
+int TabView::findTab(CompositePtr w) const {
 	for(size_t i = 0; i < size(); ++i) {
 		if(getTabInfo(static_cast<int>(i))->w == w) {
 			return static_cast<int>(i);
@@ -477,7 +478,7 @@ int TabView::findTab(ContainerPtr w) const {
 	return -1;
 }
 
-TabView::TabInfo* TabView::getTabInfo(ContainerPtr w) const {
+TabView::TabInfo* TabView::getTabInfo(CompositePtr w) const {
 	return getTabInfo(findTab(w));
 }
 
@@ -491,7 +492,7 @@ TabView::TabInfo* TabView::getTabInfo(int i) const {
 	return 0;
 }
 
-void TabView::handleTextChanging(ContainerPtr w, const tstring& newText) {
+void TabView::handleTextChanging(CompositePtr w, const tstring& newText) {
 	int i = findTab(w);
 	if(i != -1) {
 		if(hasStyle(TCS_OWNERDRAWFIXED)) {
@@ -518,8 +519,12 @@ void TabView::layout() {
 		BaseType::redraw(Rectangle(Widget::getClientSize()));
 		clientSize = tmp;
 
+		if(!manageVisibility) {
+			return;
+		}
+
 		// the client area has changed, update the selected tab synchronously.
-		ContainerPtr sel = 0;
+		CompositePtr sel = 0;
 		TabInfo* ti = getTabInfo(getSelected());
 		if(ti) {
 			sel = ti->w;
@@ -541,7 +546,7 @@ void TabView::next(bool reverse) {
 	if(viewOrder.size() < 2) {
 		return;
 	}
-	ContainerPtr wnd = getActive();
+	CompositePtr wnd = getActive();
 	if(!wnd) {
 		return;
 	}
@@ -575,7 +580,7 @@ void TabView::next(bool reverse) {
 	return;
 }
 
-void TabView::setTop(ContainerPtr wnd) {
+void TabView::setTop(CompositePtr wnd) {
 	viewOrder.remove(wnd);
 	viewOrder.push_back(wnd);
 }
@@ -999,11 +1004,11 @@ void TabView::configureAccessibility() {
 		setAccessibleName(_T("Tabs"));
 	}
 
-	auto toId = [](ContainerPtr page) {
+	auto toId = [](CompositePtr page) {
 		return reinterpret_cast<accessibility::ItemId>(page);
 	};
 	auto fromId = [](accessibility::ItemId id) {
-		return reinterpret_cast<ContainerPtr>(id);
+		return reinterpret_cast<CompositePtr>(id);
 	};
 
 	accessibility::ItemProvider provider;

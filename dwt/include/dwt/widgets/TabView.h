@@ -93,36 +93,37 @@ public:
 		bool toggleActive; /// switch the active tab when clicking on the current active tab
 		bool ctrlTab; /// handle Ctrl+Tab and Ctrl+Shift+Tab
 		bool closeable; /// allow tabs to be closed from the tab strip
+		bool manageVisibility; /// manage child visibility/resizing when switching tabs
 
 		/// Fills with default parameters
 		Seed(unsigned widthConfig_ = 150, bool toggleActive_ = false, bool ctrlTab_ = false);
 	};
 
-	void add(ContainerPtr w, const IconPtr& icon = IconPtr());
+	void add(CompositePtr w, const IconPtr& icon = IconPtr());
 
-	void mark(ContainerPtr w);
+	void mark(CompositePtr w);
 
-	void remove(ContainerPtr w);
+	void remove(CompositePtr w);
 
 	void next(bool reverse = false);
 
-	ContainerPtr getActive() const;
-	void setActive(ContainerPtr w);
+	CompositePtr getActive() const;
+	void setActive(CompositePtr w) override;
 
-	IconPtr getIcon(ContainerPtr w) const;
-	void setIcon(ContainerPtr w, const IconPtr& icon);
+	IconPtr getIcon(CompositePtr w) const;
+	void setIcon(CompositePtr w, const IconPtr& icon);
 
 	void onTitleChanged(const TitleChangedFunction& f) {
 		titleChangedFunction = f;
 	}
 
-	void onTabContextMenu(ContainerPtr w, const ContextMenuFunction& f);
+	void onTabContextMenu(CompositePtr w, const ContextMenuFunction& f);
 
 	bool filter(const MSG& msg);
 
 	const Rectangle& getClientSize() const { return clientSize; }
 
-	typedef std::vector<ContainerPtr> ChildList;
+	typedef std::vector<CompositePtr> ChildList;
 	const ChildList getChildren() const;
 
 	void create( const Seed & cs = Seed() );
@@ -146,17 +147,16 @@ protected:
 private:
 	friend class ChainingDispatcher;
 	static const TCHAR windowClass[];
-	void setActive(CompositePtr w) override;
 
 	struct TabInfo {
 		TabView* control; // for painting messages
-		ContainerPtr w;
+		CompositePtr w;
 		tstring text;
 		IconPtr icon;
 		ContextMenuFunction handleContextMenu;
 		bool marked;
 
-		TabInfo(TabView* control, ContainerPtr w, IconPtr icon) :
+		TabInfo(TabView* control, CompositePtr w, IconPtr icon) :
 		control(control), w(w), icon(icon), handleContextMenu(nullptr), marked(false) { }
 	};
 
@@ -185,34 +185,36 @@ private:
 	FontPtr boldFont;
 	IconPtr closeIcon;
 
+	bool manageVisibility;
+
 	bool inTab;
 	int highlighted;
 	bool highlightClose;
 	bool closeAuthorized;
 
-	typedef std::list<ContainerPtr> WindowList;
+	typedef std::list<CompositePtr> WindowList;
 	typedef WindowList::iterator WindowIter;
 	WindowList viewOrder;
 	Rectangle clientSize;
 	ImageListPtr icons;
 	int active;
-	ContainerPtr middleClosing;
-	ContainerPtr dragging;
+	CompositePtr middleClosing;
+	CompositePtr dragging;
 	tstring tipText;
 	Rectangle closeRect;
 
-	int findTab(ContainerPtr w) const;
+	int findTab(CompositePtr w) const;
 
 	void setActive(int i);
 	bool activateLeftTab(); /// activate the tab on the left of the selected one.
 	bool activateRightTab(); /// activate the tab on the right of the selected one.
-	TabInfo* getTabInfo(ContainerPtr w) const;
+	TabInfo* getTabInfo(CompositePtr w) const;
 	TabInfo* getTabInfo(int i) const;
 
-	void setTop(ContainerPtr w);
+	void setTop(CompositePtr w);
 
 	void handleCtrlTab(bool shift);
-	void handleTextChanging(ContainerPtr w, const tstring& newText);
+	void handleTextChanging(CompositePtr w, const tstring& newText);
 	void handleTabSelected();
 	LRESULT handleToolTip(LPARAM lParam);
 	bool handleLeftMouseDown(const MouseEvent& mouseEvent);
@@ -236,7 +238,7 @@ private:
 	int addIcon(const IconPtr& icon);
 	int getImage(unsigned index);
 	void removeIcon(unsigned index);
-	void swapWidgets(ContainerPtr oldW, ContainerPtr newW);
+	void swapWidgets(CompositePtr oldW, CompositePtr newW);
 	void configureAccessibility();
 	void recreateDpiResources(const DpiResourceEvent& event);
 

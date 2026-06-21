@@ -306,6 +306,27 @@ void WinUtil::initSeeds() {
 	xRichTextBox.font = font;
 
 	xTabs.font = font;
+	xTabs.closeIcon = tabIcon(IDI_EXIT);
+	xTabs.toggleActive = SETTING(TOGGLE_ACTIVE_WINDOW);
+
+	const auto tabStyle = SETTING(TAB_STYLE);
+	if(tabStyle & SettingsManager::TAB_STYLE_OD) {
+		xTabs.style |= TCS_OWNERDRAWFIXED;
+		xTabs.widthConfig = SETTING(TAB_WIDTH);
+	} else {
+		xTabs.style &= ~TCS_OWNERDRAWFIXED;
+		// In non-owner-drawn mode widthConfig is interpreted as max chars.
+		xTabs.widthConfig = std::max((SETTING(TAB_WIDTH) - 100) / 9, 0);
+	}
+
+	if(tabStyle & SettingsManager::TAB_STYLE_BUTTONS) {
+		xTabs.style |= TCS_BUTTONS;
+	} else {
+		xTabs.style &= ~TCS_BUTTONS;
+	}
+
+	xTabs.tabStyle = (tabStyle & SettingsManager::TAB_STYLE_BROWSER) ?
+		TabView::Seed::WinBrowser : TabView::Seed::WinDefault;
 
 	xtreeView.style |= TVS_HASBUTTONS | TVS_LINESATROOT;
 	xtreeView.exStyle = WS_EX_CLIENTEDGE;
