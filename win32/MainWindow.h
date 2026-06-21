@@ -234,6 +234,7 @@ private:
 	void handleTrayUpdate();
 
 	void openWindow(const string& id, const WindowParams& params);
+	void syncMDIClientBounds();
 	void layout();
 	void updateStatus();
 	void updateAwayStatus();

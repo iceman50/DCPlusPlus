@@ -215,6 +215,7 @@ void MDIParent::create( const Seed & cs )
 void MDIParent::setMenu(HMENU frameMenu, HMENU windowMenu)
 {
 	sendMessage(WM_MDISETMENU, reinterpret_cast<WPARAM>(frameMenu), reinterpret_cast<LPARAM>(windowMenu));
+	sendMessage(WM_MDIREFRESHMENU);
 	::DrawMenuBar(getParent()->handle());
 }
 

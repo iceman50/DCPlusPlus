@@ -447,19 +447,21 @@ void MainWindow::initMenu() {
 		help->appendItem(T_("Plugin repository"), [this] { WinUtil::openLink(links.pluginrepo); });
 	}
 
-	mainMenu->setMenu();
 	getMDI()->setMenu(mainMenu.get(), windowMenu);
+	::DrawMenuBar(handle());
 
 	if(SETTING(SHOW_MENU_BAR)) {
 		viewMenu->checkItem(viewIndexes["Menu"], true);
 	} else {
 		::SetMenu(handle(), nullptr);
+		::DrawMenuBar(handle());
 	}
 
 	// hide the temporary menu bar on WM_EXITMENULOOP
 	onRaw([this](WPARAM wParam, LPARAM) -> LRESULT {
 		if(!wParam && !SETTING(SHOW_MENU_BAR) && ::GetMenu(handle())) {
 			::SetMenu(handle(), nullptr);
+			::DrawMenuBar(handle());
 		}
 		return 0;
 	}, dwt::Message(WM_EXITMENULOOP));
@@ -640,6 +642,7 @@ void MainWindow::initStatusBar() {
 void MainWindow::initMDI() {
 	dcdebug("initMDI\n");
 	mdiPane = paned->addChild(Container::Seed());
+	mdiPane->onSized([this](const dwt::SizedEvent&) { syncMDIClientBounds(); });
 	getMDI()->onHelp(&WinUtil::help);
 	if(SETTING(ENABLE_TASKBAR_PREVIEW))
 		getMDI()->initTaskbar(this);
@@ -672,7 +675,8 @@ bool MainWindow::filter(MSG& msg) {
 		!SETTING(SHOW_MENU_BAR) && !::GetMenu(handle()) && !isShiftPressed())
 	{
 		// show the temporary menu bar when pressing Alt or F10
-		::SetMenu(handle(), mainMenu->handle());
+		getMDI()->setMenu(mainMenu.get(), windowMenu);
+		::DrawMenuBar(handle());
 
 	} else if((msg.message == WM_KEYUP || msg.message == WM_SYSKEYUP) && (msg.wParam == VK_MENU || msg.wParam == VK_F10)  &&
 		!SETTING(SHOW_MENU_BAR) && ::GetMenu(handle()))
@@ -682,6 +686,7 @@ bool MainWindow::filter(MSG& msg) {
 			MENUBARINFO info = { sizeof(MENUBARINFO) };
 			if(!::GetMenuBarInfo(handle(), OBJID_MENU, 0, &info) || !info.fBarFocused) {
 				::SetMenu(handle(), nullptr);
+				::DrawMenuBar(handle());
 			}
 		});
 	}
@@ -1006,7 +1011,6 @@ void MainWindow::handleSized(const dwt::SizedEvent& sz) {
 		if(!SETTING(ALWAYS_TRAY)) {
 			notifier->setVisible(false);
 		}
-		layout();
 	}
 }
 
@@ -1165,11 +1169,20 @@ void MainWindow::layout() {
 	}
 
 	paned->resize(r);
+	syncMDIClientBounds();
+}
+
+void MainWindow::syncMDIClientBounds() {
 	if(mdiPane && getMDI()) {
 		dwt::Rectangle mdiRect = mdiPane->getWindowRect();
 		mdiRect.pos = dwt::ClientCoordinate(dwt::ScreenCoordinate(mdiRect.pos), this).getPoint();
-		::SetWindowPos(getMDI()->handle(), HWND_TOP, mdiRect.x(), mdiRect.y(), mdiRect.width(), mdiRect.height(),
-			SWP_NOACTIVATE | SWP_NOCOPYBITS);
+
+		if(mdiRect.width() <= 0 || mdiRect.height() <= 0) {
+			return;
+		}
+
+		::SetWindowPos(getMDI()->handle(), nullptr, mdiRect.x(), mdiRect.y(), mdiRect.width(), mdiRect.height(),
+			SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOCOPYBITS);
 	}
 }
 
@@ -1517,6 +1530,7 @@ void MainWindow::handleActivate(bool active) {
 	// hide the temporary menu bar when moving out of the main window
 	if(!active && !SETTING(SHOW_MENU_BAR) && ::GetMenu(handle())) {
 		::SetMenu(handle(), nullptr);
+		::DrawMenuBar(handle());
 	}
 
 	// focus the active MDI child
@@ -1909,7 +1923,12 @@ void MainWindow::handleToolbarSize(int size) {
 void MainWindow::switchMenuBar() {
 	auto show = !SETTING(SHOW_MENU_BAR);
 	SettingsManager::getInstance()->set(SettingsManager::SHOW_MENU_BAR, show);
-	::SetMenu(handle(), show ? mainMenu->handle() : nullptr);
+	if(show) {
+		getMDI()->setMenu(mainMenu.get(), windowMenu);
+	} else {
+		::SetMenu(handle(), nullptr);
+	}
+	::DrawMenuBar(handle());
 	viewMenu->checkItem(viewIndexes["Menu"], show);
 
 	if(!show) {
@@ -1944,15 +1963,19 @@ void MainWindow::switchToolbar() {
 
 void MainWindow::switchTransfers() {
 	if(transfers) {
+		SettingsManager::getInstance()->set(SettingsManager::TRANSFERS_PANED_POS, paned->getSplitterPos(0));
 		transfers->prepareClose();
 		paned->removeChild(transfers);
 		transfers = 0;
+		paned->maximize(mdiPane);
 
 		SettingsManager::getInstance()->set(SettingsManager::SHOW_TRANSFERVIEW, false);
 		viewMenu->checkItem(viewIndexes["Transfers"], false);
 	} else {
 		SettingsManager::getInstance()->set(SettingsManager::SHOW_TRANSFERVIEW, true);
 		initTransfers();
+		paned->maximize(nullptr);
+		paned->setSplitter(0, SETTING(TRANSFERS_PANED_POS));
 	}
 
 	layout();
@@ -2009,7 +2032,25 @@ void MainWindow::handleRestore() {
 }
 
 bool MainWindow::handleMessage(const MSG& msg, LRESULT& retVal) {
-	return dwt::MDIFrame::handleMessage(msg, retVal);
+	if(msg.message == WM_SIZE) {
+		if(msg.wParam != SIZE_MINIMIZED) {
+			layout();
+		}
+
+		// MainWindow owns MDICLIENT geometry through layout()+syncMDIClientBounds().
+		// Avoid DefFrameProc resizing MDICLIENT to full frame client area, which can
+		// visually overlap toolbar/status while resizing.
+		retVal = 0;
+		return true;
+	}
+
+	auto handled = dwt::MDIFrame::handleMessage(msg, retVal);
+
+	if(msg.message == WM_MDIACTIVATE || msg.message == WM_MDISETMENU || msg.message == WM_MDIREFRESHMENU) {
+		::DrawMenuBar(handle());
+	}
+
+	return handled;
 }
 
 void MainWindow::handleTrayContextMenu() {

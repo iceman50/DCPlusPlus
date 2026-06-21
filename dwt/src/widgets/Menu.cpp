@@ -336,8 +336,23 @@ void Menu::setTitle(const tstring& title, const IconPtr& icon, bool shouldDrawSi
 }
 
 bool Menu::handlePainting(DRAWITEMSTRUCT& drawInfo, ItemDataWrapper& wrapper) {
+	auto resolveIndex = [&]() -> unsigned {
+		MENUITEMINFO dataInfo { sizeof(MENUITEMINFO), MIIM_DATA };
+		const int count = ::GetMenuItemCount(handle());
+		for(int i = 0; i < count; ++i) {
+			if(::GetMenuItemInfo(handle(), i, TRUE, &dataInfo) && dataInfo.dwItemData == reinterpret_cast<ULONG_PTR>(&wrapper)) {
+				return static_cast<unsigned>(i);
+			}
+		}
+
+		// Fallback for safety; should normally resolve via item data lookup.
+		return wrapper.index;
+	};
+
+	const auto itemIndex = resolveIndex();
+
 	MENUITEMINFO info { sizeof(MENUITEMINFO), MIIM_CHECKMARKS | MIIM_FTYPE | MIIM_DATA | MIIM_STATE | MIIM_STRING | MIIM_SUBMENU };
-	if(!::GetMenuItemInfo(handle(), wrapper.index, TRUE, &info))
+	if(!::GetMenuItemInfo(handle(), itemIndex, TRUE, &info))
 		throw Win32Exception("Couldn't get menu item info when drawing");
 
 	dwtassert((info.fType & MFT_OWNERDRAW) != 0, "Trying to draw a menu item that is not owner-drawn");
@@ -497,7 +512,7 @@ bool Menu::handlePainting(DRAWITEMSTRUCT& drawInfo, ItemDataWrapper& wrapper) {
 		// get item text
 		const int length = info.cch + 1;
 		std::vector< TCHAR > buffer( length );
-		int count = ::GetMenuString(handle(), wrapper.index, &buffer[0], length, MF_BYPOSITION);
+		int count = ::GetMenuString(handle(), itemIndex, &buffer[0], length, MF_BYPOSITION);
 		tstring itemText( buffer.begin(), buffer.begin() + count );
 
 		if(!itemText.empty()) {
@@ -654,12 +669,27 @@ bool Menu::handlePainting(DRAWITEMSTRUCT& drawInfo, ItemDataWrapper& wrapper) {
 }
 
 bool Menu::handlePainting(MEASUREITEMSTRUCT& measureInfo, ItemDataWrapper& wrapper) {
+	auto resolveIndex = [&]() -> unsigned {
+		MENUITEMINFO dataInfo { sizeof(MENUITEMINFO), MIIM_DATA };
+		const int count = ::GetMenuItemCount(handle());
+		for(int i = 0; i < count; ++i) {
+			if(::GetMenuItemInfo(handle(), i, TRUE, &dataInfo) && dataInfo.dwItemData == reinterpret_cast<ULONG_PTR>(&wrapper)) {
+				return static_cast<unsigned>(i);
+			}
+		}
+
+		// Fallback for safety; should normally resolve via item data lookup.
+		return wrapper.index;
+	};
+
+	const auto itemIndex = resolveIndex();
+
 	// this will contain the calculated size
 	auto& itemWidth = measureInfo.itemWidth;
 	auto& itemHeight = measureInfo.itemHeight;
 
 	MENUITEMINFO info { sizeof(MENUITEMINFO), MIIM_FTYPE | MIIM_DATA | MIIM_CHECKMARKS | MIIM_STRING };
-	if(!::GetMenuItemInfo(handle(), wrapper.index, TRUE, &info))
+	if(!::GetMenuItemInfo(handle(), itemIndex, TRUE, &info))
 		throw Win32Exception("Couldn't get menu item info when measuring");
 
 	dwtassert((info.fType & MFT_OWNERDRAW) != 0, "Trying to measure a menu item that is not owner-drawn");
@@ -682,7 +712,7 @@ bool Menu::handlePainting(MEASUREITEMSTRUCT& measureInfo, ItemDataWrapper& wrapp
 		return true;
 	}
 
-	Point textSize = getTextSize(getText(wrapper.index),
+	Point textSize = getTextSize(getText(itemIndex),
 		wrapper.isTitle ? titleFont :
 		wrapper.isDefault ? boldFont :
 		font);
