@@ -7,6 +7,7 @@ import fnmatch
 class Dev:
     def __init__(self, env):
         self.env = env
+        self.openssl_compat = None
 
         self.build_root = "#/build/" + env["mode"] + "-" + env["tools"]
         if env["arch"] != "x86":
@@ -382,6 +383,13 @@ class Dev:
                 env.Prepend(LIBS=["libssl", "libcrypto"])
         else:
             env.Prepend(LIBS=["ssl", "crypto"])
+            if "mingw" in env["TOOLS"]:
+                if self.openssl_compat is None:
+                    self.openssl_compat = self.env.Object(
+                        self.get_build_path("mingw/OpenSSLCompat"),
+                        "#/mingw/OpenSSLCompat.cpp",
+                    )
+                env.Append(LIBS=self.openssl_compat)
 
     def force_console(self, env):
         if "-mwindows" in env["CCFLAGS"]:
