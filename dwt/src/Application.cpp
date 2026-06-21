@@ -75,7 +75,6 @@ void Application::init() {
 
 Application::Application() :
 	itsCmdShow(0),
-	dispatchingAsync(false),
 	quit(false),
 	threadId(::GetCurrentThreadId())
 {
@@ -215,13 +214,6 @@ bool Application::dispatch() {
 	return true;
 }
 
-bool Application::processMessages() {
-	while(!quit && dispatch()) {
-	}
-
-	return !quit;
-}
-
 void Application::wake() {
 	::PostThreadMessage(threadId, WM_NULL, 0, 0);
 }
@@ -238,30 +230,14 @@ bool Application::dispatchAsync() {
 	Callback callback;
 	{
 		std::lock_guard<std::mutex> lock(tasksMutex);
-		// Keep queued callbacks serialized even when one of them starts a nested
-		// message pump through processMessages(). This preserves FIFO completion
-		// order while still allowing native UI messages to be processed.
-		if(tasks.empty() || dispatchingAsync) {
+		if(tasks.empty()) {
 			return false;
 		}
 		callback = std::move(tasks.front());
 		tasks.pop();
-		dispatchingAsync = true;
 	}
 
-	try {
-		callback();
-	} catch(...) {
-		std::lock_guard<std::mutex> lock(tasksMutex);
-		dispatchingAsync = false;
-		throw;
-	}
-
-	{
-		std::lock_guard<std::mutex> lock(tasksMutex);
-		dispatchingAsync = false;
-	}
-
+	callback();
 	return true;
 }
 
