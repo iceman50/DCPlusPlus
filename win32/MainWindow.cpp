@@ -97,12 +97,13 @@ static dwt::IconPtr mainIcon(WinUtil::createIcon(IDI_DCPP, 32));
 static dwt::IconPtr mainSmallIcon(WinUtil::createIcon(IDI_DCPP, 16));
 
 MainWindow::MainWindow() :
-dwt::Window(0, dwt::NormalDispatcher::newClass<MainWindow>(mainIcon, mainSmallIcon)),
-rebar(0),
-paned(0),
-transfers(0),
-toolbar(0),
-tabs(0),
+	dwt::MDIFrame(0),
+	rebar(0),
+	paned(0),
+	mdiPane(0),
+	windowMenu(0),
+	transfers(0),
+	toolbar(0),
 tray_pm(false),
 geoRegion(GeoRegion_Idle),
 geoStaticServe(false),
@@ -135,7 +136,7 @@ fullSlots(false)
 	links.contribute = _T("https://www.dcbase.org/contribute/");
 
 	initWindow();
-	initTabs();
+	initMDI();
 	initMenu();
 	initToolbar();
 	initStatusBar();
@@ -146,17 +147,17 @@ fullSlots(false)
 	addAccel(FCONTROL, '1', [this] { switchToolbar(); });
 	addAccel(FCONTROL, '2', [this] { switchTransfers(); });
 	addAccel(FCONTROL, '3', [this] { switchStatus(); });
-	addAccel(FCONTROL, 'D', [this] { QueueFrame::openWindow(getTabView()); });
+	addAccel(FCONTROL, 'D', [this] { QueueFrame::openWindow(getMDI()); });
 	addAccel(FCONTROL, 'E', [this] { handleRefreshFileList(); });
 	addAccel(FCONTROL, 'G', [this] { handleConnectFavHubGroup(); });
-	addAccel(FCONTROL, 'H', [this] { FavHubsFrame::openWindow(getTabView()); });
+	addAccel(FCONTROL, 'H', [this] { FavHubsFrame::openWindow(getMDI()); });
 	addAccel(FCONTROL, 'L', [this] { handleOpenFileList(); });
-	addAccel(FCONTROL, 'N', [this] { NotepadFrame::openWindow(getTabView()); });
-	addAccel(FCONTROL, 'O', [this] { SystemFrame::openWindow(getTabView()); });
-	addAccel(FCONTROL, 'P', [this] { PublicHubsFrame::openWindow(getTabView()); });
+	addAccel(FCONTROL, 'N', [this] { NotepadFrame::openWindow(getMDI()); });
+	addAccel(FCONTROL, 'O', [this] { SystemFrame::openWindow(getMDI()); });
+	addAccel(FCONTROL, 'P', [this] { PublicHubsFrame::openWindow(getMDI()); });
 	addAccel(FCONTROL, 'Q', [this] { handleQuickConnect(); });
-	addAccel(FCONTROL, 'S', [this] { SearchFrame::openWindow(getTabView()); });
-	addAccel(FCONTROL, 'U', [this] { UsersFrame::openWindow(getTabView()); });
+	addAccel(FCONTROL, 'S', [this] { SearchFrame::openWindow(getMDI()); });
+	addAccel(FCONTROL, 'U', [this] { UsersFrame::openWindow(getMDI()); });
 	addAccel(FCONTROL, VK_F3, [this] { handleSettings(); });
 	addAccel(0, VK_F5, [this] { handleRefreshFileList(); });
 	initAccels();
@@ -267,7 +268,7 @@ fullSlots(false)
 
 	if(SETTING(NICK).empty()) {
 		callAsync([this] {
-			SystemFrame::openWindow(getTabView(), false, false);
+			SystemFrame::openWindow(getMDI(), false, false);
 
 			WinUtil::helpId(this, IDH_GET_STARTED);
 			handleSettings();
@@ -290,10 +291,13 @@ void MainWindow::initWindow() {
 
 	cs.style &= ~WS_VISIBLE;
 	cs.exStyle |= WS_EX_APPWINDOW;
+	cs.mdiIdFirstChild = MDI_FIRST_CHILD;
 	if (ResourceManager::getInstance()->isRTL())
 		cs.exStyle |= WS_EX_RTLREADING;
 
 	create(cs);
+	setLargeIcon(mainIcon);
+	setSmallIcon(mainSmallIcon);
 
 	setHelpId(IDH_MAIN);
 
@@ -308,6 +312,7 @@ void MainWindow::initMenu() {
 	{
 		Menu::Seed cs = WinUtil::Seeds::menu;
 		cs.popup = false;
+		cs.commandMessages = true;
 		mainMenu = addChild(cs);
 	}
 
@@ -322,13 +327,13 @@ void MainWindow::initMenu() {
 		file->appendSeparator();
 
 		file->appendItem(T_("Open file list...\tCtrl+L"), [this] { handleOpenFileList(); }, WinUtil::menuIcon(IDI_OPEN_FILE_LIST));
-		file->appendItem(T_("Open own list"), [this] { DirectoryListingFrame::openOwnList(getTabView()); }, WinUtil::menuIcon(IDI_OPEN_OWN_FILE_LIST));
+		file->appendItem(T_("Open own list"), [this] { DirectoryListingFrame::openOwnList(getMDI()); }, WinUtil::menuIcon(IDI_OPEN_OWN_FILE_LIST));
 		file->appendItem(T_("Match downloaded lists"), [this] { handleMatchAll(); });
 		file->appendItem(T_("Refresh file list\tF5"), [this] { handleRefreshFileList(); }, WinUtil::menuIcon(IDI_REFRESH));
 		file->appendSeparator();
 
 		file->appendItem(T_("Open downloads directory"), [this] { handleOpenDownloadsDir(); }, WinUtil::menuIcon(IDI_OPEN_DL_DIR));
-		file->appendItem(T_("Open crash log"), [this] { TextFrame::openWindow(getTabView(), Text::fromT(CrashLogger::getPath())); });
+		file->appendItem(T_("Open crash log"), [this] { TextFrame::openWindow(getMDI(), Text::fromT(CrashLogger::getPath())); });
 		file->appendSeparator();
 
 		file->appendItem(T_("Settings\tCtrl+F3"), [this] { handleSettings(); }, WinUtil::menuIcon(IDI_SETTINGS));
@@ -348,32 +353,32 @@ void MainWindow::initMenu() {
 		viewMenu = mainMenu->appendPopup(T_("&View"));
 
 		viewIndexes[PublicHubsFrame::id] = viewMenu->appendItem(T_("&Public Hubs\tCtrl+P"),
-			[this] { PublicHubsFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_PUBLICHUBS));
+			[this] { PublicHubsFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_PUBLICHUBS));
 		viewIndexes[FavHubsFrame::id] = viewMenu->appendItem(T_("&Favorite Hubs\tCtrl+H"),
-			[this] { FavHubsFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+			[this] { FavHubsFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
 		viewIndexes[UsersFrame::id] = viewMenu->appendItem(T_("&Users\tCtrl+U"),
-			[this] { UsersFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_USERS));
+			[this] { UsersFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_USERS));
 		viewMenu->appendSeparator();
 		viewIndexes[QueueFrame::id] = viewMenu->appendItem(T_("&Download Queue\tCtrl+D"),
-			[this] { QueueFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_QUEUE));
+			[this] { QueueFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_QUEUE));
 		viewIndexes[FinishedDLFrame::id] = viewMenu->appendItem(T_("Finished Downloads"),
-			[this] { FinishedDLFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_FINISHED_DL));
+			[this] { FinishedDLFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_FINISHED_DL));
 		viewIndexes[FinishedULFrame::id] = viewMenu->appendItem(T_("Finished Uploads"),
-			[this] { FinishedULFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_FINISHED_UL));
+			[this] { FinishedULFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_FINISHED_UL));
 		viewMenu->appendSeparator();
-		viewMenu->appendItem(T_("&Search\tCtrl+S"), [this] { SearchFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_SEARCH));
+		viewMenu->appendItem(T_("&Search\tCtrl+S"), [this] { SearchFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_SEARCH));
 		viewIndexes[ADLSearchFrame::id] = viewMenu->appendItem(T_("ADL Search"),
-			[this] { ADLSearchFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_ADLSEARCH));
+			[this] { ADLSearchFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_ADLSEARCH));
 		viewMenu->appendSeparator();
 		viewIndexes[NotepadFrame::id] = viewMenu->appendItem(T_("&Notepad\tCtrl+N"),
-			[this] { NotepadFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_NOTEPAD));
+			[this] { NotepadFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_NOTEPAD));
 		viewIndexes[SystemFrame::id] = viewMenu->appendItem(T_("System Log\tCtrl+O"),
-			[this] { SystemFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_LOGS));
+			[this] { SystemFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_LOGS));
 		viewIndexes[StatsFrame::id] = viewMenu->appendItem(T_("Network Statistics"),
-			[this] { StatsFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_NET_STATS));
+			[this] { StatsFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_NET_STATS));
 #ifdef DEBUG
 		viewIndexes[ACFrame::id] = viewMenu->appendItem(T_("About:config"),
-			[this] { ACFrame::openWindow(getTabView()); }, WinUtil::menuIcon(IDI_DCPP));
+			[this] { ACFrame::openWindow(getMDI()); }, WinUtil::menuIcon(IDI_DCPP));
 #endif
 
 		viewMenu->appendItem(T_("Indexing progress"), [this] { handleHashProgress(); }, WinUtil::menuIcon(IDI_INDEXING));
@@ -385,25 +390,36 @@ void MainWindow::initMenu() {
 	}
 
 	{
-		auto window = mainMenu->appendPopup(T_("&Window"));
+		windowMenu = mainMenu->appendPopup(T_("&Window"));
 
-		window->appendItem(T_("Reconnect disconnected hubs"), &HubFrame::reconnectDisconnected, WinUtil::menuIcon(IDI_RECONNECT));
-		window->appendSeparator();
+		windowMenu->appendItem(T_("&Cascade"), [this] { getMDI()->cascade(); });
+		windowMenu->appendItem(T_("Tile &horizontally"), [this] { getMDI()->tile(true); });
+		windowMenu->appendItem(T_("Tile &vertically"), [this] { getMDI()->tile(false); });
+		windowMenu->appendItem(T_("&Arrange icons"), [this] { getMDI()->arrange(); });
+		windowMenu->appendItem(T_("&Minimize all"), [this] { getMDI()->minimizeAll(); });
+		windowMenu->appendSeparator();
+		windowMenu->appendItem(T_("Close active window\tCtrl+F4"), [this] { getMDI()->closeActive(); }, WinUtil::menuIcon(IDI_EXIT));
+		windowMenu->appendItem(T_("Close all windows"), [this] { getMDI()->closeAll(); }, WinUtil::menuIcon(IDI_EXIT));
+		windowMenu->appendSeparator();
+
+		windowMenu->appendItem(T_("Reconnect disconnected hubs"), &HubFrame::reconnectDisconnected, WinUtil::menuIcon(IDI_RECONNECT));
+		windowMenu->appendSeparator();
 		
-		window->appendItem(T_("Close all hubs"), [] { HubFrame::closeAll(false); }, WinUtil::menuIcon(IDI_HUB));
-		window->appendItem(T_("Close disconnected hubs"), [] { HubFrame::closeAll(true); }, WinUtil::menuIcon(IDI_HUB_OFF));
-		window->appendItem(T_("Close all hubs of a favorite group"), [this] { handleCloseFavGroup(false); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
-		window->appendItem(T_("Close hubs not in a favorite group"), [this] { handleCloseFavGroup(true); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
-		window->appendSeparator();
+		windowMenu->appendItem(T_("Close all hubs"), [] { HubFrame::closeAll(false); }, WinUtil::menuIcon(IDI_HUB));
+		windowMenu->appendItem(T_("Close disconnected hubs"), [] { HubFrame::closeAll(true); }, WinUtil::menuIcon(IDI_HUB_OFF));
+		windowMenu->appendItem(T_("Close all hubs of a favorite group"), [this] { handleCloseFavGroup(false); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+		windowMenu->appendItem(T_("Close hubs not in a favorite group"), [this] { handleCloseFavGroup(true); }, WinUtil::menuIcon(IDI_FAVORITE_HUBS));
+		windowMenu->appendSeparator();
 
-		window->appendItem(T_("Close all PM windows"), [] { PrivateFrame::closeAll(false); }, WinUtil::menuIcon(IDI_PRIVATE));
-		window->appendItem(T_("Close all offline PM windows"), [] { PrivateFrame::closeAll(true); }, WinUtil::menuIcon(IDI_PRIVATE_OFF));
-		window->appendSeparator();
+		windowMenu->appendItem(T_("Close all PM windows"), [] { PrivateFrame::closeAll(false); }, WinUtil::menuIcon(IDI_PRIVATE));
+		windowMenu->appendItem(T_("Close all offline PM windows"), [] { PrivateFrame::closeAll(true); }, WinUtil::menuIcon(IDI_PRIVATE_OFF));
+		windowMenu->appendSeparator();
 
-		window->appendItem(T_("Close all file list windows"), &DirectoryListingFrame::closeAll, WinUtil::menuIcon(IDI_DIRECTORY));
-		window->appendSeparator();
+		windowMenu->appendItem(T_("Close all file list windows"), &DirectoryListingFrame::closeAll, WinUtil::menuIcon(IDI_DIRECTORY));
+		windowMenu->appendSeparator();
 
-		window->appendItem(T_("Close all search windows"), &SearchFrame::closeAll, WinUtil::menuIcon(IDI_SEARCH));
+		windowMenu->appendItem(T_("Close all search windows"), &SearchFrame::closeAll, WinUtil::menuIcon(IDI_SEARCH));
+		windowMenu->appendSeparator();
 	}
 
 	{
@@ -432,6 +448,7 @@ void MainWindow::initMenu() {
 	}
 
 	mainMenu->setMenu();
+	getMDI()->setMenu(mainMenu.get(), windowMenu);
 
 	if(SETTING(SHOW_MENU_BAR)) {
 		viewMenu->checkItem(viewIndexes["Menu"], true);
@@ -456,38 +473,38 @@ void MainWindow::initToolbar() {
 	toolbar = addChild(ToolBar::Seed());
 
 	toolbar->addButton(PublicHubsFrame::id, WinUtil::toolbarIcon(IDI_PUBLICHUBS), 0, T_("Public Hubs"), false,
-		IDH_TOOLBAR_PUBLIC_HUBS, [this] { PublicHubsFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_PUBLIC_HUBS, [this] { PublicHubsFrame::openWindow(getMDI()); });
 	toolbar->addButton("Reconnect", WinUtil::toolbarIcon(IDI_RECONNECT), 0, T_("Reconnect"), false,
 		IDH_TOOLBAR_RECONNECT, [this] { handleReconnect(); });
 	toolbar->addButton(FavHubsFrame::id, WinUtil::toolbarIcon(IDI_FAVORITE_HUBS), 0, T_("Favorite Hubs"), false,
-		IDH_TOOLBAR_FAVORITE_HUBS, [this] { FavHubsFrame::openWindow(getTabView()); },
+		IDH_TOOLBAR_FAVORITE_HUBS, [this] { FavHubsFrame::openWindow(getMDI()); },
 		[this](const dwt::ScreenCoordinate& pt) { handleFavHubsDropDown(pt); });
 	toolbar->addButton(UsersFrame::id, WinUtil::toolbarIcon(IDI_USERS), 0, T_("Users"), false,
-		IDH_TOOLBAR_USERS, [this] { UsersFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_USERS, [this] { UsersFrame::openWindow(getMDI()); });
 	toolbar->addButton(QueueFrame::id, WinUtil::toolbarIcon(IDI_QUEUE), 0, T_("Download Queue"), false,
-		IDH_TOOLBAR_QUEUE, [this] { QueueFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_QUEUE, [this] { QueueFrame::openWindow(getMDI()); });
 	toolbar->addButton(FinishedDLFrame::id, WinUtil::toolbarIcon(IDI_FINISHED_DL), 0, T_("Finished Downloads"), false,
-		IDH_TOOLBAR_FINISHED_DL, [this] { FinishedDLFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_FINISHED_DL, [this] { FinishedDLFrame::openWindow(getMDI()); });
 	toolbar->addButton(FinishedULFrame::id, WinUtil::toolbarIcon(IDI_FINISHED_UL), 0, T_("Finished Uploads"), false,
-		IDH_TOOLBAR_FINISHED_UL, [this] { FinishedULFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_FINISHED_UL, [this] { FinishedULFrame::openWindow(getMDI()); });
 	toolbar->addButton(SearchFrame::id, WinUtil::toolbarIcon(IDI_SEARCH), 0, T_("Search"), false,
-		IDH_TOOLBAR_SEARCH, [this] { SearchFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_SEARCH, [this] { SearchFrame::openWindow(getMDI()); });
 	toolbar->addButton(ADLSearchFrame::id, WinUtil::toolbarIcon(IDI_ADLSEARCH), 0, T_("ADL Search"), false,
-		IDH_TOOLBAR_ADL_SEARCH, [this] { ADLSearchFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_ADL_SEARCH, [this] { ADLSearchFrame::openWindow(getMDI()); });
 	toolbar->addButton(StatsFrame::id, WinUtil::toolbarIcon(IDI_NET_STATS), 0, T_("Network Statistics"), false,
-		IDH_TOOLBAR_NET_STATS, [this] { StatsFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_NET_STATS, [this] { StatsFrame::openWindow(getMDI()); });
 	toolbar->addButton("OpenDlDir", WinUtil::toolbarIcon(IDI_OPEN_DL_DIR), 0, T_("Open downloads directory"), false,
 		IDH_TOOLBAR_DOWNLOADS_DIR, [this] { handleOpenDownloadsDir(); });
 	toolbar->addButton("OpenFL", WinUtil::toolbarIcon(IDI_OPEN_FILE_LIST), 0, T_("Open file list..."), false,
 		IDH_TOOLBAR_FILE_LIST, [this] { handleOpenFileList(); });
 	toolbar->addButton("OpenOwnFL", WinUtil::toolbarIcon(IDI_OPEN_OWN_FILE_LIST), 0, T_("Open own list"), false,
-		IDH_TOOLBAR_OWN_FILE_LIST, [this] { DirectoryListingFrame::openOwnList(getTabView()); });
+		IDH_TOOLBAR_OWN_FILE_LIST, [this] { DirectoryListingFrame::openOwnList(getMDI()); });
 	toolbar->addButton("Recents", WinUtil::toolbarIcon(IDI_RECENTS), 0, T_("Recent windows"), false,
 		IDH_TOOLBAR_RECENT, nullptr, [this](const dwt::ScreenCoordinate& pt) { handleRecent(pt); });
 	toolbar->addButton("Settings", WinUtil::toolbarIcon(IDI_SETTINGS), 0, T_("Settings"), false,
 		IDH_TOOLBAR_SETTINGS, [this] { handleSettings(); });
 	toolbar->addButton(NotepadFrame::id, WinUtil::toolbarIcon(IDI_NOTEPAD), 0, T_("Notepad"), false,
-		IDH_TOOLBAR_NOTEPAD, [this] { NotepadFrame::openWindow(getTabView()); });
+		IDH_TOOLBAR_NOTEPAD, [this] { NotepadFrame::openWindow(getMDI()); });
 	toolbar->addButton("Refresh", WinUtil::toolbarIcon(IDI_REFRESH), 0, T_("Refresh file list"), false,
 		IDH_TOOLBAR_REFRESH, [this] { handleRefreshFileList(); });
 	toolbar->addButton("Plugins", WinUtil::toolbarIcon(IDI_PLUGINS), 0, T_("Plugins"), false,
@@ -597,7 +614,7 @@ void MainWindow::initStatusBar() {
 	status->onDblClicked(STATUS_AWAY, &Util::switchAway);
 
 	{
-		auto f = [this] { StatsFrame::openWindow(getTabView(), false); };
+		auto f = [this] { StatsFrame::openWindow(getMDI(), false); };
 		status->onDblClicked(STATUS_DOWN_TOTAL, f);
 		status->onDblClicked(STATUS_UP_TOTAL, f);
 		status->onDblClicked(STATUS_DOWN_DIFF, f);
@@ -620,27 +637,12 @@ void MainWindow::initStatusBar() {
 	viewMenu->checkItem(viewIndexes["Status"], true);
 }
 
-void MainWindow::initTabs() {
-	dcdebug("initTabs\n");
-	TabView::Seed seed = WinUtil::Seeds::tabs;
-	seed.widthConfig = SETTING(TAB_WIDTH);
-	if(SETTING(TAB_STYLE) & SettingsManager::TAB_STYLE_OD) {
-		if(SETTING(TAB_STYLE) & SettingsManager::TAB_STYLE_BROWSER)
-			seed.tabStyle = TabView::Seed::WinBrowser;
-	} else {
-		seed.style &= ~TCS_OWNERDRAWFIXED;
-		seed.widthConfig = (seed.widthConfig - 100) / 9; // max width to max chars
-	}
-	if(SETTING(TAB_STYLE) & SettingsManager::TAB_STYLE_BUTTONS)
-		seed.style |= TCS_BUTTONS;
-	seed.closeIcon = WinUtil::tabIcon(IDI_EXIT);
-	seed.toggleActive = SETTING(TOGGLE_ACTIVE_WINDOW);
-	seed.ctrlTab = true;
-	tabs = paned->addChild(seed);
+void MainWindow::initMDI() {
+	dcdebug("initMDI\n");
+	mdiPane = paned->addChild(Container::Seed());
+	getMDI()->onHelp(&WinUtil::help);
 	if(SETTING(ENABLE_TASKBAR_PREVIEW))
-		tabs->initTaskbar(this);
-	tabs->onTitleChanged([this](const tstring &title) { handleTabsTitleChanged(title); });
-	tabs->onHelp(&WinUtil::help);
+		getMDI()->initTaskbar(this);
 }
 
 void MainWindow::initTransfers() {
@@ -648,7 +650,7 @@ void MainWindow::initTransfers() {
 		return;
 
 	dcdebug("initTransfers\n");
-	transfers = new TransferView(paned, getTabView());
+	transfers = new TransferView(paned, getMDI());
 
 	viewMenu->checkItem(viewIndexes["Transfers"], true);
 }
@@ -684,17 +686,13 @@ bool MainWindow::filter(MSG& msg) {
 		});
 	}
 
-	if(tabs && tabs->filter(msg)) {
-		return true;
-	}
-
 #ifdef HAVE_HTMLHELP_H
 	if(::HtmlHelp(NULL, NULL, HH_PRETRANSLATEMESSAGE, reinterpret_cast<DWORD_PTR>(&msg))) {
 		return true;
 	}
 #endif
 
-	Container* active = getTabView()->getActive();
+	dwt::Widget* active = getMDI()->getActive();
 	if(active) {
 		if(::IsDialogMessage( active->handle(), & msg )) {
 			return true;
@@ -806,11 +804,7 @@ UserConnection* MainWindow::getPMConn(const UserPtr& user, UserConnectionListene
 	return nullptr;
 }
 
-void MainWindow::handleTabsTitleChanged(const tstring& title) {
-	setText(title.empty() ? _T(APPNAME) _T(" ") _T(VERSIONSTRING) : _T(APPNAME) _T(" ") _T(VERSIONSTRING) _T(" - [") + title + _T("]"));
-}
-
-static void multiConnect(const string& group, TabViewPtr parent) {
+static void multiConnect(const string& group, MDIParentPtr parent) {
 	for(auto& i: FavoriteManager::getInstance()->getFavoriteHubs(group))
 		HubFrame::openWindow(parent, i->getServer());
 }
@@ -827,7 +821,7 @@ void MainWindow::handleFavHubsDropDown(const dwt::ScreenCoordinate& pt) {
 	for(auto& i: groupMenus) {
 		i.second = menu->appendPopup(escapeMenu(Text::toT(i.first)));
 		auto group = i.first;
-		i.second->appendItem(T_("Connect to all hubs in this group"), [=] { multiConnect(group, getTabView()); });
+		i.second->appendItem(T_("Connect to all hubs in this group"), [=] { multiConnect(group, getMDI()); });
 		i.second->appendSeparator();
 	}
 
@@ -835,7 +829,7 @@ void MainWindow::handleFavHubsDropDown(const dwt::ScreenCoordinate& pt) {
 		auto groupMenu = groupMenus.find(entry->getGroup());
 		((groupMenu == groupMenus.end()) ? menu.get() : groupMenu->second)->appendItem(
 			escapeMenu(Text::toT(entry->getName())),
-			[this, entry] { HubFrame::openWindow(getTabView(), entry->getServer()); });
+			[this, entry] { HubFrame::openWindow(getMDI(), entry->getServer()); });
 	}
 
 	menu->open(pt);
@@ -871,7 +865,7 @@ void addRecentMenu(Menu* menu, MainWindow* mainWindow, const tstring& text, unsi
 			addActiveParam(params);
 
 			popup->appendItem(escapeMenu(Text::toT(title->second)),
-				std::bind(&T::parseWindowParams, mainWindow->getTabView(), params),
+				std::bind(&T::parseWindowParams, mainWindow->getMDI(), params),
 				T::isFavorite(params) ? favIcon : nullptr);
 		}
 	}
@@ -968,7 +962,7 @@ void MainWindow::handleReconnect() {
 }
 
 void MainWindow::forwardHub(void (HubFrame::*f)()) {
-	HubFrame* active = dynamic_cast<HubFrame*>(getTabView()->getActive());
+	HubFrame* active = dynamic_cast<HubFrame*>(getMDI()->getActive());
 	if(active) {
 		(active->*f)();
 	}
@@ -976,7 +970,7 @@ void MainWindow::forwardHub(void (HubFrame::*f)()) {
 
 void MainWindow::handleTaskbarOverlay() {
 	if(!SETTING(ENABLE_TASKBAR_PREVIEW)) { return; }
-	tabs->setOverlayIcon(tabs->getActive(), WinUtil::createIcon(away ? IDI_RED_BALL : IDI_GREEN_BALL, 16), away ? _T("Away") : _T("Available"));
+	getMDI()->setOverlayIcon(nullptr, WinUtil::createIcon(away ? IDI_RED_BALL : IDI_GREEN_BALL, 16), away ? _T("Away") : _T("Available"));
 }
 
 void MainWindow::handleQuickConnect() {
@@ -985,7 +979,7 @@ void MainWindow::handleQuickConnect() {
 
 	ParamDlg dlg(this, T_("Quick Connect"), T_("Hub address or Magnet link"));
 	if(dlg.run() == IDOK && !WinUtil::parseLink(dlg.getValue(), false)) {
-		HubFrame::openWindow(getTabView(), Text::fromT(dlg.getValue()));
+		HubFrame::openWindow(getMDI(), Text::fromT(dlg.getValue()));
 	}
 }
 
@@ -997,7 +991,7 @@ void MainWindow::handleConnectFavHubGroup() {
 	if(chooseFavHubGroup(T_("Connect to a favorite hub group"), group)) {
 		const auto& hubs = FavoriteManager::getInstance()->getFavoriteHubs(Text::fromT(group));
 		for(auto& hub: hubs) {
-			HubFrame::openWindow(getTabView(), hub->getServer());
+			HubFrame::openWindow(getMDI(), hub->getServer());
 		}
 	}
 }
@@ -1077,14 +1071,16 @@ void MainWindow::saveSettings() {
 
 void MainWindow::saveWindowSettings() {
 	{
-		const auto& views = tabs->getChildren();
-		auto active = tabs->getActive();
+		const auto views = getMDI()->getChildren();
+		auto active = getMDI()->getActive();
 
 		auto wm = WindowManager::getInstance();
 		wm->clear();
 
 		for(auto& i: views) {
-			auto child = static_cast<MDIChildFrame<dwt::Container>*>(i);
+			auto child = dynamic_cast<MDIChildFrameBase*>(i);
+			if(!child)
+				continue;
 			auto params = child->getWindowParams();
 			if(child == active)
 				addActiveParam(params);
@@ -1153,6 +1149,9 @@ bool MainWindow::handleClosing() {
 }
 
 void MainWindow::layout() {
+	if(!paned)
+		return;
+
 	dwt::Rectangle r { getClientSize() };
 
 	if(!rebar->empty()) {
@@ -1166,6 +1165,12 @@ void MainWindow::layout() {
 	}
 
 	paned->resize(r);
+	if(mdiPane && getMDI()) {
+		dwt::Rectangle mdiRect = mdiPane->getWindowRect();
+		mdiRect.pos = dwt::ClientCoordinate(dwt::ScreenCoordinate(mdiRect.pos), this).getPoint();
+		::SetWindowPos(getMDI()->handle(), HWND_TOP, mdiRect.x(), mdiRect.y(), mdiRect.width(), mdiRect.height(),
+			SWP_NOACTIVATE | SWP_NOCOPYBITS);
+	}
 }
 
 LRESULT MainWindow::handleWhereAreYou() {
@@ -1267,6 +1272,10 @@ void MainWindow::updateAwayStatus() {
 
 MainWindow::~MainWindow() {
 	dwt::Application::instance().removeFilter(filterIter);
+}
+
+bool MainWindow::onForeground() const {
+	return ::GetAncestor(::GetForegroundWindow(), GA_ROOTOWNER) == handle();
 }
 
 namespace {
@@ -1433,7 +1442,7 @@ void MainWindow::handleOpenFileList() {
 	if(WinUtil::browseFileList(this, file)) {
 		auto u = DirectoryListing::getUserFromFilename(Text::fromT(file));
 		if(u) {
-			DirectoryListingFrame::openWindow(getTabView(), file, Util::emptyStringT,
+			DirectoryListingFrame::openWindow(getMDI(), file, Util::emptyStringT,
 				HintedUser(u, Util::emptyString), 0, DirectoryListingFrame::FORCE_ACTIVE);
 		} else {
 			dwt::MessageBox(this).show(T_("Invalid file list name"), _T(APPNAME) _T(" ") _T(VERSIONSTRING),
@@ -1444,9 +1453,16 @@ void MainWindow::handleOpenFileList() {
 
 DWORD WINAPI MainWindow::stopper(void* p) {
 	MainWindow* mf = reinterpret_cast<MainWindow*>(p);
+	HWND mdi = mf->getMDI()->handle();
 	HWND wnd, wnd2 = NULL;
 
-	while( (wnd=::GetWindow(mf->getTabView()->handle(), GW_CHILD)) != NULL) {
+	for(;;) {
+		wnd = ::GetWindow(mdi, GW_CHILD);
+		while(wnd && !(::GetWindowLongPtr(wnd, GWL_EXSTYLE) & WS_EX_MDICHILD))
+			wnd = ::GetWindow(wnd, GW_HWNDNEXT);
+		if(!wnd)
+			break;
+
 		if(wnd == wnd2) {
 			::Sleep(100);
 		} else {
@@ -1503,10 +1519,10 @@ void MainWindow::handleActivate(bool active) {
 		::SetMenu(handle(), nullptr);
 	}
 
-	// focus the active tab window
-	Container* w = getTabView()->getActive();
+	// focus the active MDI child
+	dwt::Widget* w = getMDI()->getActive();
 	if(w) {
-		w->setFocus();
+		::SetFocus(w->handle());
 	}
 }
 
@@ -1916,9 +1932,10 @@ void MainWindow::switchToolbar() {
 		initToolbar();
 
 		// re-check currently opened static windows
-		const auto& views = tabs->getChildren();
+		const auto views = getMDI()->getChildren();
 		for(auto& i: views) {
-			toolbar->setButtonChecked(static_cast<MDIChildFrame<dwt::Container>*>(i)->getId(), true);
+			if(auto child = dynamic_cast<MDIChildFrameBase*>(i))
+				toolbar->setButtonChecked(child->getId(), true);
 		}
 	}
 
@@ -1938,7 +1955,7 @@ void MainWindow::switchTransfers() {
 		initTransfers();
 	}
 
-	paned->layout();
+	layout();
 }
 
 void MainWindow::switchStatus() {
@@ -1992,11 +2009,7 @@ void MainWindow::handleRestore() {
 }
 
 bool MainWindow::handleMessage(const MSG& msg, LRESULT& retVal) {
-	bool handled = dwt::Window::handleMessage(msg, retVal);
-	if(!handled && msg.message == WM_COMMAND && tabs) {
-		handled = tabs->handleMessage(msg, retVal);
-	}
-	return handled;
+	return dwt::MDIFrame::handleMessage(msg, retVal);
 }
 
 void MainWindow::handleTrayContextMenu() {
@@ -2062,7 +2075,7 @@ void MainWindow::on(ConnectionManagerListener::Removed, ConnectionQueueItem* cqi
 void MainWindow::on(UserConnectionListener::PrivateMessage, UserConnection* uc, const ChatMessage& message) noexcept {
 	auto user = uc->getHintedUser();
 	callAsync([this, message, user] {
-		auto opened = PrivateFrame::isOpen(user) || PrivateFrame::gotMessage(getTabView(), message, user.hint, false);
+		auto opened = PrivateFrame::isOpen(user) || PrivateFrame::gotMessage(getMDI(), message, user.hint, false);
 
 		// remove our listener as the PM window now handles the conn.
 		{
@@ -2146,7 +2159,7 @@ void MainWindow::on(QueueManagerListener::Finished, QueueItem* qi, const string&
 			auto file = qi->getListName();
 			auto user = qi->getDownloads()[0]->getHintedUser();
 			callAsync([this, file, dir, user, speed] {
-				DirectoryListingFrame::openWindow(getTabView(), Text::toT(file), Text::toT(dir), user, speed);
+				DirectoryListingFrame::openWindow(getMDI(), Text::toT(file), Text::toT(dir), user, speed);
 				WinUtil::notify(WinUtil::NOTIFICATION_FINISHED_FL, Text::toT(Util::getFileName(file)), [=] {
 					DirectoryListingFrame::activateWindow(user);
 				});
@@ -2155,7 +2168,7 @@ void MainWindow::on(QueueManagerListener::Finished, QueueItem* qi, const string&
 		} else if(qi->isSet(QueueItem::FLAG_TEXT)) {
 			auto file = qi->getTarget();
 			callAsync([this, file] {
-				TextFrame::openWindow(getTabView(), file, true, true);
+				TextFrame::openWindow(getMDI(), file, true, true);
 			});
 		}
 	}
@@ -2164,19 +2177,19 @@ void MainWindow::on(QueueManagerListener::Finished, QueueItem* qi, const string&
 		auto file = qi->getTarget();
 		callAsync([this, file] {
 			WinUtil::notify(WinUtil::NOTIFICATION_FINISHED_DL, Text::toT(file), [=] {
-				FinishedDLFrame::focusFile(getTabView(), file);
+				FinishedDLFrame::focusFile(getMDI(), file);
 			});
 		});
 	}
 }
 
 void MainWindow::on(QueueManagerListener::PartialList, const HintedUser& aUser, const string& text) noexcept {
-	callAsync([this, aUser, text] { DirectoryListingFrame::openWindow(getTabView(), aUser, text, 0); });
+	callAsync([this, aUser, text] { DirectoryListingFrame::openWindow(getMDI(), aUser, text, 0); });
 }
 
 void MainWindow::openWindow(const string& id, const WindowParams& params) {
 	if(0);
-#define compare_id(frame) else if(frame::id == id) frame::parseWindowParams(getTabView(), params)
+#define compare_id(frame) else if(frame::id == id) frame::parseWindowParams(getMDI(), params)
 	compare_id(HubFrame);
 	compare_id(PrivateFrame);
 	compare_id(DirectoryListingFrame);

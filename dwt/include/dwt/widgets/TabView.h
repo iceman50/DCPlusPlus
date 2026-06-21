@@ -146,6 +146,7 @@ protected:
 private:
 	friend class ChainingDispatcher;
 	static const TCHAR windowClass[];
+	void setActive(CompositePtr w) override;
 
 	struct TabInfo {
 		TabView* control; // for painting messages

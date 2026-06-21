@@ -33,15 +33,15 @@ public:
 	UserInfoBase(const HintedUser& u) : user(u) { }
 	virtual ~UserInfoBase() { }
 
-	virtual void getList(TabViewPtr);
-	virtual void browseList(TabViewPtr);
-	virtual void getOwnList(TabViewPtr);
+	virtual void getList(MDIParentPtr);
+	virtual void browseList(MDIParentPtr);
+	virtual void getOwnList(MDIParentPtr);
 	virtual void matchQueue();
-	virtual void pm(TabViewPtr);
+	virtual void pm(MDIParentPtr);
 	virtual void grant();
 	virtual void addFav();
 	virtual void removeFromQueue();
-	virtual void connectFav(TabViewPtr);
+	virtual void connectFav(MDIParentPtr);
 	virtual void ignoreChat(bool ignore);
 
 	enum {
@@ -108,16 +108,16 @@ protected:
 	void handleMatchQueue() {
 		handleUserFunction([](UserInfoBase* u) { u->matchQueue(); });
 	}
-	void handleGetList(TabViewPtr parent) {
+	void handleGetList(MDIParentPtr parent) {
 		handleUserFunction([&](UserInfoBase* u) { u->getList(parent); });
 	}
-	void handleBrowseList(TabViewPtr parent) {
+	void handleBrowseList(MDIParentPtr parent) {
 		handleUserFunction([&](UserInfoBase* u) { u->browseList(parent); });
 	}
 	void handleAddFavorite() {
 		handleUserFunction([](UserInfoBase* u) { u->addFav(); });
 	}
-	void handlePrivateMessage(TabViewPtr parent) {
+	void handlePrivateMessage(MDIParentPtr parent) {
 		handleUserFunction([&](UserInfoBase* u) { u->pm(parent); });
 	}
 	void handleGrantSlot() {
@@ -126,7 +126,7 @@ protected:
 	void handleRemoveFromQueue() {
 		handleUserFunction([](UserInfoBase* u) { u->removeFromQueue(); });
 	}
-	void handleConnectFav(TabViewPtr parent) {
+	void handleConnectFav(MDIParentPtr parent) {
 		handleUserFunction([&](UserInfoBase* u) { u->connectFav(parent); });
 	}
 	void handleIgnoreChat(bool ignore) {
@@ -141,7 +141,7 @@ protected:
 		WinUtil::setClipboard(text);
 	}
 
-	void appendUserItems(TabViewPtr parent, Menu* menu, bool defaultIsGetList = true, bool includeSendPM = true) {
+	void appendUserItems(MDIParentPtr parent, Menu* menu, bool defaultIsGetList = true, bool includeSendPM = true) {
 		auto users = t().selectedUsersImpl();
 		if(users.empty())
 			return;

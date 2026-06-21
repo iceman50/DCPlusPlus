@@ -54,7 +54,7 @@ ACFrame::SettingInfo::SettingInfo(const int index_) : index(index_) {
 	}
 }
 
-ACFrame::ACFrame(TabViewPtr parent) :
+ACFrame::ACFrame(MDIParentPtr parent) :
 	BaseType(parent, T_("About:config"), IDH_ABOUTCONFIG, IDI_DCPP, false),
 	grid(0),
 	disclaimer(0),
@@ -367,7 +367,7 @@ bool ACFrame::handleSettingsContextMenu(dwt::ScreenCoordinate pt) {
 	auto setting = settings->getSelectedData();
 	auto& name = setting->getName();
 	auto menu = addChild(WinUtil::Seeds::menu);
-	menu->setTitle(name, getParent()->getIcon(this));
+	menu->setTitle(name, getIcon());
 
 	if(setting->type == SettingsManager::TYPE_BOOL) {
 		menu->appendItem(T_("&Toggle"), [this] { modify(); });

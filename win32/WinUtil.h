@@ -312,7 +312,7 @@ public:
 	static void setApplicationStartupUnregister();
 	static void setApplicationStartup();
 
-	static void addUserItems(Menu* menu, const HintedUserList& users, TabViewPtr parent, const StringList& dirs = StringList());
+	static void addUserItems(Menu* menu, const HintedUserList& users, MDIParentPtr parent, const StringList& dirs = StringList());
 
 	/* utility functions to create icons. use these throughout the prog to make it easier to change
 	sizes globally should the need arise to later on. */

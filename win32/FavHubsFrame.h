@@ -42,7 +42,7 @@ protected:
 	friend class StaticFrame<FavHubsFrame>;
 	friend class MDIChildFrame<FavHubsFrame>;
 
-	FavHubsFrame(TabViewPtr parent);
+	FavHubsFrame(MDIParentPtr parent);
 	virtual ~FavHubsFrame();
 
 	void layout();

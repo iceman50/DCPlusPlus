@@ -27,7 +27,7 @@ class StaticFrame : public MDIChildFrame<T> {
 	typedef MDIChildFrame<T> BaseType;
 
 public:
-	StaticFrame(TabViewPtr parent, const tstring& title, unsigned helpId, unsigned iconId, bool manageAccels = true) :
+	StaticFrame(MDIParentPtr parent, const tstring& title, unsigned helpId, unsigned iconId, bool manageAccels = true) :
 		MDIChildFrame<T>(parent, title, helpId, iconId, manageAccels)
 	{
 		WinUtil::setStaticWindowState(T::id, true);
@@ -38,7 +38,7 @@ public:
 		WinUtil::setStaticWindowState(T::id, false);
 	}
 
-	static void openWindow(TabViewPtr parent, bool close = true, bool activate = true) {
+	static void openWindow(MDIParentPtr parent, bool close = true, bool activate = true) {
 		if(frame) {
 			if(close && parent->getActive() == frame) {
 				frame->close();
@@ -52,7 +52,7 @@ public:
 		}
 	}
 
-	static void parseWindowParams(TabViewPtr parent, const WindowParams& params) {
+	static void parseWindowParams(MDIParentPtr parent, const WindowParams& params) {
 		openWindow(parent, false, BaseType::parseActivateParam(params));
 	}
 

@@ -78,17 +78,17 @@ public:
 		FORCE_ACTIVE,
 		FORCE_INACTIVE
 	};
-	static void openWindow(TabViewPtr parent, const tstring& aFile, const tstring& aDir, const HintedUser& aUser, int64_t aSpeed, Activation activate = FOLLOW_SETTING);
+	static void openWindow(MDIParentPtr parent, const tstring& aFile, const tstring& aDir, const HintedUser& aUser, int64_t aSpeed, Activation activate = FOLLOW_SETTING);
 private:
-	static void openWindow_(TabViewPtr parent, const tstring& aFile, const tstring& aDir, const HintedUser& aUser, int64_t aSpeed, Activation activate);
+	static void openWindow_(MDIParentPtr parent, const tstring& aFile, const tstring& aDir, const HintedUser& aUser, int64_t aSpeed, Activation activate);
 public:
-	static void openWindow(TabViewPtr parent, const HintedUser& aUser, const string& txt, int64_t aSpeed);
+	static void openWindow(MDIParentPtr parent, const HintedUser& aUser, const string& txt, int64_t aSpeed);
 	static void activateWindow(const HintedUser& aUser);
-	static void openOwnList(TabViewPtr parent, const tstring& dir = Util::emptyStringT, Activation activate = FORCE_ACTIVE);
+	static void openOwnList(MDIParentPtr parent, const tstring& dir = Util::emptyStringT, Activation activate = FORCE_ACTIVE);
 	static void closeAll();
 
 	WindowParams getWindowParams() const;
-	static void parseWindowParams(TabViewPtr parent, const WindowParams& params);
+	static void parseWindowParams(MDIParentPtr parent, const WindowParams& params);
 	static bool isFavorite(const WindowParams& params);
 
 private:
@@ -223,7 +223,7 @@ private:
 
 	static UserMap lists;
 
-	DirectoryListingFrame(TabViewPtr parent, const HintedUser& aUser, int64_t aSpeed);
+	DirectoryListingFrame(MDIParentPtr parent, const HintedUser& aUser, int64_t aSpeed);
 	virtual ~DirectoryListingFrame();
 
 	void layout();
@@ -295,7 +295,7 @@ private:
 	void findFile(bool reverse);
 
 	// MDIChildFrame
-	void tabMenuImpl(dwt::Menu* menu);
+	void windowMenuImpl(dwt::Menu* menu);
 
 	// AspectUserInfo
 	UserInfoList selectedUsersImpl();

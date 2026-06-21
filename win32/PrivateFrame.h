@@ -61,15 +61,15 @@ public:
 	const string& getId() const;
 
 	/// @return whether a new window can be opened (wrt the "Max PM windows" setting).
-	static bool gotMessage(TabViewPtr parent, const ChatMessage& message, const string& hubHint, bool fromBot);
-	static void openWindow(TabViewPtr parent, const HintedUser& replyTo, const tstring& msg = Util::emptyStringT,
+	static bool gotMessage(MDIParentPtr parent, const ChatMessage& message, const string& hubHint, bool fromBot);
+	static void openWindow(MDIParentPtr parent, const HintedUser& replyTo, const tstring& msg = Util::emptyStringT,
 		const string& logPath = Util::emptyString, bool activate = true);
 	static void activateWindow(const UserPtr& u);
 	static bool isOpen(const UserPtr& u) { return frames.find(u) != frames.end(); }
 	static void closeAll(bool offline);
 
 	WindowParams getWindowParams() const;
-	static void parseWindowParams(TabViewPtr parent, const WindowParams& params);
+	static void parseWindowParams(MDIParentPtr parent, const WindowParams& params);
 	static bool isFavorite(const WindowParams& params);
 
 	void sendMessage(const tstring& msg, bool thirdPerson = false);
@@ -88,7 +88,7 @@ private:
 	typedef unordered_map<UserPtr, PrivateFrame*, User::Hash> FrameMap;
 	static FrameMap frames;
 
-	PrivateFrame(TabViewPtr parent, const HintedUser& replyTo_, const string& logPath = Util::emptyString);
+	PrivateFrame(MDIParentPtr parent, const HintedUser& replyTo_, const string& logPath = Util::emptyString);
 	virtual ~PrivateFrame();
 
 	void layout();
@@ -111,7 +111,7 @@ private:
 	void runUserCommand(const UserCommand& uc);
 
 	// MDIChildFrame
-	void tabMenuImpl(dwt::Menu* menu);
+	void windowMenuImpl(dwt::Menu* menu);
 
 	// AspectChat
 	void enterImpl(const tstring& s);

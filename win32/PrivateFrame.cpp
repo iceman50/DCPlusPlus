@@ -40,7 +40,7 @@ const string& PrivateFrame::getId() const { return id; }
 
 PrivateFrame::FrameMap PrivateFrame::frames;
 
-void PrivateFrame::openWindow(TabViewPtr parent, const HintedUser& replyTo_, const tstring& msg,
+void PrivateFrame::openWindow(MDIParentPtr parent, const HintedUser& replyTo_, const tstring& msg,
 	const string& logPath, bool activate)
 {
 	auto i = frames.find(replyTo_);
@@ -51,7 +51,7 @@ void PrivateFrame::openWindow(TabViewPtr parent, const HintedUser& replyTo_, con
 		frame->sendMessage(msg);
 }
 
-bool PrivateFrame::gotMessage(TabViewPtr parent, const ChatMessage& message, const string& hubHint, bool fromBot) {
+bool PrivateFrame::gotMessage(MDIParentPtr parent, const ChatMessage& message, const string& hubHint, bool fromBot) {
 	auto& user = (message.replyTo == ClientManager::getInstance()->getMe()) ? message.to : message.replyTo;
 
 	auto i = frames.find(user);
@@ -116,7 +116,7 @@ WindowParams PrivateFrame::getWindowParams() const {
 	return ret;
 }
 
-void PrivateFrame::parseWindowParams(TabViewPtr parent, const WindowParams& params) {
+void PrivateFrame::parseWindowParams(MDIParentPtr parent, const WindowParams& params) {
 	auto cid = params.find("CID");
 	auto hub = params.find("Hub");
 	if(cid != params.end() && hub != params.end()) {
@@ -136,7 +136,7 @@ bool PrivateFrame::isFavorite(const WindowParams& params) {
 	return false;
 }
 
-PrivateFrame::PrivateFrame(TabViewPtr parent, const HintedUser& replyTo_, const string& logPath) :
+PrivateFrame::PrivateFrame(MDIParentPtr parent, const HintedUser& replyTo_, const string& logPath) :
 BaseType(parent, _T(""), IDH_PM, IDI_PRIVATE_OFF, false),
 replyTo(replyTo_),
 online(false),
@@ -463,7 +463,7 @@ PrivateFrame::UserInfoList PrivateFrame::selectedUsersImpl() {
 	return UserInfoList(1, &replyTo);
 }
 
-void PrivateFrame::tabMenuImpl(dwt::Menu* menu) {
+void PrivateFrame::windowMenuImpl(dwt::Menu* menu) {
 	appendUserItems(getParent(), menu, false, false);
 	prepareMenu(menu, UserCommand::CONTEXT_USER, replyTo.getUser().hint);
 	menu->appendSeparator();
@@ -481,7 +481,7 @@ bool PrivateFrame::handleChatContextMenu(dwt::ScreenCoordinate pt) {
 	
 	WinUtil::addSearchMenu(menu.get(), searchText);
 
-	menu->setTitle(escapeMenu(getText()), getParent()->getIcon(this));
+	menu->setTitle(escapeMenu(getText()), getIcon());
 
 	prepareMenu(menu.get(), UserCommand::CONTEXT_USER, replyTo.getUser().hint);
 

@@ -55,7 +55,7 @@ static const ColumnInfo hubsColumns[] = {
 	{ N_("Group"), 100, false }
 };
 
-FavHubsFrame::FavHubsFrame(TabViewPtr parent) :
+FavHubsFrame::FavHubsFrame(MDIParentPtr parent) :
 BaseType(parent, T_("Favorite Hubs"), IDH_FAVORITE_HUBS, IDI_FAVORITE_HUBS),
 grid(0),
 hubs(0)
@@ -359,7 +359,7 @@ bool FavHubsFrame::handleContextMenu(dwt::ScreenCoordinate pt) {
 
 	auto menu = addChild(WinUtil::Seeds::menu);
 	menu->setTitle((sel == 0) ? getText() : (sel == 1) ? escapeMenu(hubs->getText(hubs->getSelected(), COLUMN_NAME)) :
-		str(TF_("%1% hubs") % sel), getParent()->getIcon(this));
+		str(TF_("%1% hubs") % sel), getIcon());
 	menu->appendItem(T_("&Connect"), [this] { openSelected(); }, dwt::IconPtr(), sel, true);
 	menu->appendSeparator();
 	menu->appendItem(T_("&New..."), [this] { handleAdd(); });

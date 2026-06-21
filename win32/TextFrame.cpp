@@ -38,7 +38,7 @@ const string& TextFrame::getId() const { return id; }
 
 static const size_t MAX_TEXT_LEN = 64*1024;
 
-void TextFrame::openWindow(TabViewPtr parent, const string& fileName, bool activate, bool temporary) {
+void TextFrame::openWindow(MDIParentPtr parent, const string& fileName, bool activate, bool temporary) {
 	auto window = new TextFrame(parent, fileName, temporary);
 	if(activate)
 		window->activate();
@@ -50,14 +50,14 @@ WindowParams TextFrame::getWindowParams() const {
 	return ret;
 }
 
-void TextFrame::parseWindowParams(TabViewPtr parent, const WindowParams& params) {
+void TextFrame::parseWindowParams(MDIParentPtr parent, const WindowParams& params) {
 	auto path = params.find("Path");
 	if(path != params.end()) {
 		openWindow(parent, path->second, parseActivateParam(params));
 	}
 }
 
-TextFrame::TextFrame(TabViewPtr parent, const string& path, bool temporary) :
+TextFrame::TextFrame(MDIParentPtr parent, const string& path, bool temporary) :
 BaseType(parent, Text::toT(Util::getFileName(path)), IDH_TEXT_VIEWER),
 grid(0),
 pad(0),

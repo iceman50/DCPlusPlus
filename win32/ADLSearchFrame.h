@@ -39,7 +39,7 @@ protected:
 	friend class StaticFrame<ADLSearchFrame>;
 	friend class MDIChildFrame<ADLSearchFrame>;
 
-	ADLSearchFrame(TabViewPtr parent);
+	ADLSearchFrame(MDIParentPtr parent);
 	virtual ~ADLSearchFrame();
 
 	void layout();

@@ -58,7 +58,7 @@ static const ColumnInfo columns[] = {
 	{ N_("Country"), 100, false }
 };
 
-TransferView::TransferView(dwt::Widget* parent, TabViewPtr mdi_) :
+TransferView::TransferView(dwt::Widget* parent, MDIParentPtr mdi_) :
 	dwt::Container(parent),
 	transfers(0),
 	mdi(mdi_),

@@ -28,6 +28,7 @@ using dwt::ContainerPtr;
 using dwt::GridPtr;
 using dwt::GroupBoxPtr;
 using dwt::LabelPtr;
+using dwt::MDIParentPtr;
 using dwt::MenuPtr;
 using dwt::ProgressBarPtr;
 using dwt::RadioButtonPtr;

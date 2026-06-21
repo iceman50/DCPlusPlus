@@ -107,7 +107,7 @@ static const FieldName fields[] =
 	{ "", _T(""), 0 }
 };
 
-UsersFrame::UsersFrame(TabViewPtr parent) :
+UsersFrame::UsersFrame(MDIParentPtr parent) :
 BaseType(parent, T_("Users"), IDH_USERS, IDI_USERS, false),
 grid(0),
 splitter(0),

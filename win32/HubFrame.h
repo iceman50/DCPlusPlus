@@ -68,7 +68,7 @@ public:
 	static const string id;
 	const string& getId() const;
 
-	static void openWindow(TabViewPtr parent, string url, bool activate = true, bool connect = true);
+	static void openWindow(MDIParentPtr parent, string url, bool activate = true, bool connect = true);
 	static void activateWindow(const string& url);
 
 private:
@@ -83,7 +83,7 @@ public:
 	static void resortUsers();
 
 	WindowParams getWindowParams() const;
-	static void parseWindowParams(TabViewPtr parent, const WindowParams& params);
+	static void parseWindowParams(MDIParentPtr parent, const WindowParams& params);
 	static bool isFavorite(const WindowParams& params);
 
 private:
@@ -184,7 +184,7 @@ private:
 
 	static vector<HubFrame*> frames;
 
-	HubFrame(TabViewPtr parent, string&& url, bool connect);
+	HubFrame(MDIParentPtr parent, string&& url, bool connect);
 	virtual ~HubFrame();
 
 	void layout();
@@ -250,7 +250,7 @@ private:
 	void redirect(string&& target);
 
 	// MDIChildFrame
-	void tabMenuImpl(dwt::Menu* menu);
+	void windowMenuImpl(dwt::Menu* menu);
 
 	// AspectChat
 	void enterImpl(const tstring& s);

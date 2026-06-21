@@ -41,7 +41,7 @@ private:
 
 	TextBoxPtr log;
 
-	SystemFrame(TabViewPtr parent);
+	SystemFrame(MDIParentPtr parent);
 	virtual ~SystemFrame();
 
 	void layout();

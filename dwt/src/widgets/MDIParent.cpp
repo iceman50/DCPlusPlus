@@ -36,6 +36,7 @@
 #include <dwt/resources/Brush.h>
 #include <dwt/resources/Icon.h>
 #include <dwt/widgets/Menu.h>
+#include <dwt/widgets/MDIChild.h>
 
 namespace dwt {
 
@@ -100,10 +101,63 @@ void drawBackground(MDIParent* parent, Canvas& canvas, COLORREF color, const Bit
 }
 
 MDIParent::Seed::Seed() :
-	BaseType::Seed(WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VSCROLL | WS_HSCROLL, WS_EX_CLIENTEDGE),
+	BaseType::Seed(WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VSCROLL | WS_HSCROLL, WS_EX_CLIENTEDGE),
 	idFirstChild(0),
 	windowMenu(NULL)
 {
+}
+
+std::vector<MDIChildPtr> MDIParent::getChildren() const
+{
+	std::vector<MDIChildPtr> children;
+	for(HWND child = ::GetWindow(handle(), GW_CHILD); child; child = ::GetWindow(child, GW_HWNDNEXT)) {
+		if(auto widget = hwnd_cast<MDIChildPtr>(child)) {
+			children.push_back(widget);
+		}
+	}
+	return children;
+}
+
+void MDIParent::closeAll()
+{
+	for(auto child: getChildren()) {
+		child->postMessage(WM_CLOSE);
+	}
+}
+
+void MDIParent::destroy(MDIChildPtr child)
+{
+	if(child && ::GetParent(child->handle()) == handle()) {
+		sendMessage(WM_MDIDESTROY, reinterpret_cast<WPARAM>(child->handle()));
+	}
+}
+
+void MDIParent::initTaskbar(FramePtr frame)
+{
+	Taskbar::initTaskbar(frame);
+	for(auto child: getChildren()) {
+		addToTaskbar(child);
+	}
+}
+
+void MDIParent::registerChild(MDIChildPtr child)
+{
+	addToTaskbar(child);
+}
+
+void MDIParent::unregisterChild(MDIChildPtr child)
+{
+	removeFromTaskbar(child);
+}
+
+void MDIParent::setChildIcon(MDIChildPtr child, const IconPtr& icon)
+{
+	setTaskbarIcon(child, icon);
+}
+
+void MDIParent::setActiveChild(MDIChildPtr child)
+{
+	setActiveOnTaskbar(child);
 }
 
 MDIParent::~MDIParent()

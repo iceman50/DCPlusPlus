@@ -217,7 +217,7 @@ private:
 
 	HTREEITEM fileLists;
 
-	QueueFrame(TabViewPtr parent);
+	QueueFrame(MDIParentPtr parent);
 	virtual ~QueueFrame();
 
 	void updateStatus();

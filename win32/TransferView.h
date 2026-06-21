@@ -56,7 +56,7 @@ class TransferView :
 	friend class AspectUserCommand<TransferView>;
 
 public:
-	TransferView(dwt::Widget* parent, TabViewPtr mdi_);
+	TransferView(dwt::Widget* parent, MDIParentPtr mdi_);
 	virtual ~TransferView();
 
 	void prepareClose();
@@ -238,7 +238,7 @@ private:
 	typedef unordered_map<UserPtr, ConnectionInfo*, User::Hash> ConnectionMap;
 	ConnectionMap connections[CONNECTION_TYPE_LAST];
 
-	TabViewPtr mdi;
+	MDIParentPtr mdi;
 
 	const dwt::IconPtr downloadIcon;
 	const dwt::IconPtr uploadIcon;

@@ -53,7 +53,7 @@ public:
 	static const string id;
 	const string& getId() const;
 
-	static void openWindow(TabViewPtr parent, const tstring& str = Util::emptyStringT,
+	static void openWindow(MDIParentPtr parent, const tstring& str = Util::emptyStringT,
 		SearchManager::TypeModes type = SearchManager::TYPE_ANY, const tstring& url = Util::emptyStringT );
 	static void closeAll();
 
@@ -210,7 +210,7 @@ private:
 
 	std::string token;
 
-	SearchFrame(TabViewPtr parent, const tstring& initialString, SearchManager::TypeModes initialType_, const tstring& url = Util::emptyStringT);
+	SearchFrame(MDIParentPtr parent, const tstring& initialString, SearchManager::TypeModes initialType_, const tstring& url = Util::emptyStringT);
 	virtual ~SearchFrame();
 
 	void handlePurgeClicked();

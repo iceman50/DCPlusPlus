@@ -104,7 +104,7 @@ int DirectoryListingFrame::ItemInfo::compareItems(const ItemInfo* a, const ItemI
 	}
 }
 
-void DirectoryListingFrame::openWindow(TabViewPtr parent, const tstring& aFile, const tstring& aDir, const HintedUser& aUser, int64_t aSpeed, Activation activate) {
+void DirectoryListingFrame::openWindow(MDIParentPtr parent, const tstring& aFile, const tstring& aDir, const HintedUser& aUser, int64_t aSpeed, Activation activate) {
 	auto prev = lists.find(aUser);
 	if(prev == lists.end()) {
 		openWindow_(parent, aFile, aDir, aUser, aSpeed, activate);
@@ -116,11 +116,11 @@ void DirectoryListingFrame::openWindow(TabViewPtr parent, const tstring& aFile, 
 	}
 }
 
-void DirectoryListingFrame::openWindow_(TabViewPtr parent, const tstring& aFile, const tstring& aDir, const HintedUser& aUser, int64_t aSpeed, Activation activate) {
+void DirectoryListingFrame::openWindow_(MDIParentPtr parent, const tstring& aFile, const tstring& aDir, const HintedUser& aUser, int64_t aSpeed, Activation activate) {
 	DirectoryListingFrame* frame = new DirectoryListingFrame(parent, aUser, aSpeed);
 
-	/* save the path now in case the tab is closed without having been loaded (the file list will
-	only be loaded upon tab activation), to still have it in WindowManager. */
+	/* save the path now in case the window is closed without having been loaded (the file list will
+	only be loaded upon window activation), to still have it in WindowManager. */
 	auto& path = frame->path;
 	path = Text::fromT(aFile);
 	auto n = path.size();
@@ -141,7 +141,7 @@ void DirectoryListingFrame::openWindow_(TabViewPtr parent, const tstring& aFile,
 	}
 }
 
-void DirectoryListingFrame::openOwnList(TabViewPtr parent, const tstring& dir, Activation activate) {
+void DirectoryListingFrame::openOwnList(MDIParentPtr parent, const tstring& dir, Activation activate) {
 	openWindow(parent, Text::toT(ShareManager::getInstance()->getOwnListFile()), dir,
 		HintedUser(ClientManager::getInstance()->getMe(), Util::emptyString), 0, activate);
 }
@@ -165,7 +165,7 @@ WindowParams DirectoryListingFrame::getWindowParams() const {
 	return ret;
 }
 
-void DirectoryListingFrame::parseWindowParams(TabViewPtr parent, const WindowParams& params) {
+void DirectoryListingFrame::parseWindowParams(MDIParentPtr parent, const WindowParams& params) {
 	auto path = params.find("FileList");
 	auto dir = params.find("Directory");
 	auto hub = params.find("Hub");
@@ -196,7 +196,7 @@ bool DirectoryListingFrame::isFavorite(const WindowParams& params) {
 	return false;
 }
 
-void DirectoryListingFrame::openWindow(TabViewPtr parent, const HintedUser& aUser, const string& txt, int64_t aSpeed) {
+void DirectoryListingFrame::openWindow(MDIParentPtr parent, const HintedUser& aUser, const string& txt, int64_t aSpeed) {
 	auto i = lists.find(aUser);
 	if(i != lists.end()) {
 		i->second->speed = aSpeed;
@@ -219,7 +219,7 @@ void DirectoryListingFrame::activateWindow(const HintedUser& aUser) {
 	}
 }
 
-DirectoryListingFrame::DirectoryListingFrame(TabViewPtr parent, const HintedUser& aUser, int64_t aSpeed) :
+DirectoryListingFrame::DirectoryListingFrame(MDIParentPtr parent, const HintedUser& aUser, int64_t aSpeed) :
 	BaseType(parent, _T(""), IDH_FILE_LIST, IDI_DIRECTORY, false),
 	loader(nullptr),
 	loading(0),
@@ -872,7 +872,7 @@ ShellMenuPtr DirectoryListingFrame::makeMultiMenu() {
 	auto menu = addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
 
 	size_t sel = files->countSelected();
-	menu->setTitle(str(TF_("%1% items") % sel), getParent()->getIcon(this));
+	menu->setTitle(str(TF_("%1% items") % sel), getIcon());
 
 	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, WinUtil::menuIcon(IDI_DOWNLOAD), true, true);
 	addTargets(menu.get());
@@ -885,7 +885,7 @@ ShellMenuPtr DirectoryListingFrame::makeDirMenu(ItemInfo* ii) {
 	auto menu = addChild(ShellMenu::Seed(WinUtil::Seeds::menu));
 
 	menu->setTitle(escapeMenu(ii ? ii->getText(COLUMN_FILENAME) : getText()),
-		ii ? WinUtil::fileImages->getIcon(ii->getImage(0)) : getParent()->getIcon(this));
+		ii ? WinUtil::fileImages->getIcon(ii->getImage(0)) : getIcon());
 
 	menu->appendItem(T_("&Download"), [this] { handleDownload(); }, WinUtil::menuIcon(IDI_DOWNLOAD), true, true);
 	addTargets(menu.get());
@@ -1683,7 +1683,7 @@ bool DirectoryListingFrame::handleSearchChar(int c) {
 	return c == VK_RETURN;
 }
 
-void DirectoryListingFrame::tabMenuImpl(dwt::Menu* menu) {
+void DirectoryListingFrame::windowMenuImpl(dwt::Menu* menu) {
 	addUserMenu(menu);
 	menu->appendSeparator();
 }

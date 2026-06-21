@@ -61,6 +61,9 @@ class ColorDialog;
 class ComboBox;
 typedef ComboBox* ComboBoxPtr;
 
+class Composite;
+typedef Composite* CompositePtr;
+
 class Container;
 typedef Container* ContainerPtr;
 

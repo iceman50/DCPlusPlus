@@ -31,7 +31,7 @@
 #include <dcpp/UserConnectionListener.h>
 #include <dcpp/WindowInfo.h>
 
-#include <dwt/widgets/Window.h>
+#include <dwt/widgets/MDIFrame.h>
 
 #include "forward.h"
 #include "AspectStatus.h"
@@ -40,7 +40,7 @@ using std::function;
 using std::unique_ptr;
 
 class MainWindow :
-	public dwt::Window,
+	public dwt::MDIFrame,
 	public AspectStatus<MainWindow>,
 	private ConnectionManagerListener,
 	private UserConnectionListener,
@@ -66,7 +66,8 @@ public:
 		STATUS_LAST
 	};
 
-	TabViewPtr getTabView() { return tabs; }
+	MDIParentPtr getMDI() { return getMDIParent(); }
+	bool onForeground() const;
 
 	virtual bool handleMessage( const MSG & msg, LRESULT & retVal );
 
@@ -130,6 +131,8 @@ private:
 		TIMER_SAVE
 	};
 
+	enum { MDI_FIRST_CHILD = 45000 };
+
 	enum {
 		CONN_VERSION,
 		CONN_GEO_V6,
@@ -140,12 +143,13 @@ private:
 
 	RebarPtr rebar;
 	SplitterContainerPtr paned;
+	ContainerPtr mdiPane;
 	MenuPtr mainMenu;
 	Menu* pluginMenu;
 	Menu* viewMenu;
+	Menu* windowMenu;
 	TransferView* transfers;
 	ToolBarPtr toolbar;
-	TabViewPtr tabs;
 
 	typedef unordered_map<string, unsigned> ViewIndexes;
 	ViewIndexes viewIndexes; /// indexes of menu commands of the "View" menu that open static windows
@@ -182,7 +186,7 @@ private:
 	void initMenu();
 	void initToolbar();
 	void initStatusBar();
-	void initTabs();
+	void initMDI();
 	void initTransfers();
 	void initTray();
 
@@ -224,8 +228,6 @@ private:
 	LRESULT handleActivateApp(WPARAM wParam);
 	LRESULT handleCopyData(LPARAM lParam);
 	LRESULT handleWhereAreYou();
-
-	void handleTabsTitleChanged(const tstring& title);
 
 	void handleTrayContextMenu();
 	void handleTrayClicked();

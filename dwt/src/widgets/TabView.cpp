@@ -379,6 +379,10 @@ void TabView::setActive(ContainerPtr w) {
 	setActive(findTab(w));
 }
 
+void TabView::setActive(CompositePtr w) {
+	setActive(dynamic_cast<ContainerPtr>(w));
+}
+
 void TabView::setActive(int i) {
 	if(i == -1)
 		return;
