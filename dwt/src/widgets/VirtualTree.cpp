@@ -44,10 +44,17 @@ VirtualTree::Seed::Seed(const BaseType::Seed& seed) :
 
 VirtualTree::VirtualTree(Widget* parent) :
 	BaseType(parent),
-	selected(nullptr)
+	selected(nullptr),
+	suppressSelectionSync(0),
+	virtualMultiSelect(false)
 {
 	addRoot();
 	configureAccessibility();
+}
+
+void VirtualTree::create(const Seed& seed) {
+	virtualMultiSelect = (seed.tvExStyle & TVS_EX_MULTISELECT) != 0;
+	BaseType::create(seed);
 }
 
 bool VirtualTree::handleMessage(const MSG& msg, LRESULT& retVal) {
@@ -143,7 +150,7 @@ bool VirtualTree::handleMessage(const MSG& msg, LRESULT& retVal) {
 		}
 	case TVM_GETSELECTEDCOUNT:
 		{
-			retVal = selected ? 1 : 0;
+			retVal = selectedCount();
 			return true;
 		}
 	case TVM_GETNEXTITEM:
@@ -233,7 +240,14 @@ bool VirtualTree::handleMessage(const MSG& msg, LRESULT& retVal) {
 				}
 			case TVN_SELCHANGED:
 				{
-					handleSelected(find(reinterpret_cast<NMTREEVIEW*>(msg.lParam)->itemNew.hItem));
+					if(!suppressSelectionSync) {
+						handleSelected(find(reinterpret_cast<NMTREEVIEW*>(msg.lParam)->itemNew.hItem));
+					}
+					break;
+				}
+			case TVN_ITEMCHANGED:
+				{
+					handleItemChanged(*reinterpret_cast<NMTVITEMCHANGE*>(msg.lParam));
 					break;
 				}
 			}
@@ -311,6 +325,105 @@ bool VirtualTree::handleMessage(const MSG& msg, LRESULT& retVal) {
 		}
 	}
 	return BaseType::handleMessage(msg, retVal);
+}
+
+HTREEITEM VirtualTree::insert(const tstring& text, HTREEITEM parent, HTREEITEM insertAfter,
+	LPARAM param, bool expanded, int iconIndex, int selectedIconIndex)
+{
+	TVINSERTSTRUCT item = { parent, insertAfter, { { TVIF_TEXT } } };
+	auto& value = item.itemex;
+	value.pszText = const_cast<TCHAR*>(text.c_str());
+	if(param) {
+		value.mask |= TVIF_PARAM;
+		value.lParam = param;
+	}
+	if(expanded) {
+		value.mask |= TVIF_STATE;
+		value.state = TVIS_EXPANDED;
+		value.stateMask = TVIS_EXPANDED;
+	}
+	value.mask |= TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+	value.iImage = iconIndex;
+	value.iSelectedImage = selectedIconIndex == -1 ? iconIndex : selectedIconIndex;
+	return insert(item);
+}
+
+HTREEITEM VirtualTree::insert(TVINSERTSTRUCT& tvis) {
+	return handleInsert(tvis)->ptr();
+}
+
+bool VirtualTree::isExpanded(HTREEITEM item) const {
+	auto value = reinterpret_cast<Item*>(item);
+	return validate(value) && value->expanded();
+}
+
+void VirtualTree::expand(HTREEITEM item) {
+	handleExpand(TVE_EXPAND, reinterpret_cast<Item*>(item));
+}
+
+void VirtualTree::collapse(HTREEITEM item) {
+	handleExpand(TVE_COLLAPSE, reinterpret_cast<Item*>(item));
+}
+
+void VirtualTree::setMultiSelect(bool value) {
+	virtualMultiSelect = value;
+	BaseType::setMultiSelect(value);
+	if(!value && selected) {
+		clearSelection(selected);
+	}
+}
+
+Tree::CheckState VirtualTree::getCheckState(HTREEITEM item) const {
+	auto value = reinterpret_cast<Item*>(item);
+	return validate(value) ?
+		static_cast<CheckState>((value->state & TVIS_STATEIMAGEMASK) >> 12) :
+		NoCheckBox;
+}
+
+void VirtualTree::setCheckState(HTREEITEM item, CheckState state) {
+	TVITEMEX value = { TVIF_HANDLE | TVIF_STATE, item };
+	value.stateMask = TVIS_STATEIMAGEMASK;
+	value.state = INDEXTOSTATEIMAGEMASK(static_cast<UINT>(state));
+	handleSetItem(value);
+}
+
+HTREEITEM VirtualTree::getSelected() const {
+	return selected ? selected->ptr() : HTREEITEM();
+}
+
+void VirtualTree::setSelected(HTREEITEM item) {
+	handleSelect(TVGN_CARET, reinterpret_cast<Item*>(item));
+}
+
+size_t VirtualTree::countSelected() const {
+	return selectedCount();
+}
+
+bool VirtualTree::getItemSelected(HTREEITEM item) const {
+	auto value = reinterpret_cast<Item*>(item);
+	return validate(value) && value->selected();
+}
+
+void VirtualTree::setItemSelected(HTREEITEM item, bool value) {
+	auto selectedItem = reinterpret_cast<Item*>(item);
+	if(!validate(selectedItem)) {
+		return;
+	}
+	if(value && !multiSelect()) {
+		clearSelection(selectedItem);
+	}
+	setSelectedState(selectedItem, value);
+	if(value && !selected) {
+		selected = selectedItem;
+	}
+}
+
+std::vector<HTREEITEM> VirtualTree::getSelectedItems() const {
+	std::vector<HTREEITEM> result;
+	for(auto item = firstSelected(); item; item = nextSelected(item)) {
+		result.push_back(item->ptr());
+	}
+	return result;
 }
 
 // root node
@@ -410,6 +523,10 @@ bool VirtualTree::Item::expanded() const {
 	return state & TVIS_EXPANDED;
 }
 
+bool VirtualTree::Item::selected() const {
+	return (state & TVIS_SELECTED) != 0;
+}
+
 VirtualTree::Item* VirtualTree::Item::lastExpandedChild() const {
 	return lastChild && expanded() ? lastChild->lastExpandedChild() : const_cast<Item*>(this);
 }
@@ -431,11 +548,27 @@ VirtualTree::Item* VirtualTree::Item::nextVisible() const {
 	return nullptr;
 }
 
+VirtualTree::Item* VirtualTree::Item::nextItem() const {
+	if(firstChild) { return firstChild; }
+	if(next) { return next; }
+	auto item = this;
+	while(item->parent) {
+		item = item->parent;
+		if(item->next) {
+			return item->next;
+		}
+	}
+	return nullptr;
+}
+
 bool VirtualTree::handleDelete(LPARAM lParam) {
 	if(!lParam || lParam == reinterpret_cast<LPARAM>(TVI_ROOT)) {
 		// delete all items.
+		beginSelectionSync();
 		bool ret = sendTreeMsg(TVM_DELETEITEM, 0, lParam);
+		endSelectionSync();
 		items.clear();
+		selected = nullptr;
 		addRoot();
 		raiseAccessibleStructureChanged();
 		return ret;
@@ -545,7 +678,7 @@ VirtualTree::Item* VirtualTree::handleGetNextItem(WPARAM code, Item* item) {
 	case TVGN_FIRSTVISIBLE: return root->firstChild;
 	case TVGN_LASTVISIBLE: return root->lastExpandedChild();
 	case TVGN_NEXT: return item ? item->next : nullptr;
-	case TVGN_NEXTSELECTED: return nullptr;
+	case TVGN_NEXTSELECTED: return item ? nextSelected(item) : firstSelected();
 	case TVGN_NEXTVISIBLE: return item ? item->nextVisible() : nullptr;
 	case TVGN_PARENT: return item ? item->parent : nullptr;
 	case TVGN_PREVIOUS: return item ? item->prev : nullptr;
@@ -570,15 +703,73 @@ VirtualTree::Item* VirtualTree::handleInsert(TVINSERTSTRUCT& tvis) {
 	return &item;
 }
 
+void VirtualTree::handleItemChanged(const NMTVITEMCHANGE& data) {
+	if(suppressSelectionSync) {
+		return;
+	}
+
+	auto item = find(data.hItem);
+	if(!validate(item)) {
+		return;
+	}
+
+	const auto changedState = data.uStateNew ^ data.uStateOld;
+	if(changedState) {
+		item->state &= ~changedState;
+		item->state |= data.uStateNew & changedState;
+	}
+
+	if(changedState & TVIS_SELECTED) {
+		if(item->selected()) {
+			if(!multiSelect()) {
+				clearSelection(item);
+			}
+			if(!selected) {
+				selected = item;
+			}
+			raiseAccessibleItemEvent(
+				reinterpret_cast<accessibility::ItemId>(item), 20012);
+		} else if(selected == item) {
+			selected = firstSelected();
+		}
+	}
+}
+
 bool VirtualTree::handleSelect(WPARAM code, Item* item) {
-	if(!validate(item)) { return sendTreeMsg(TVM_SELECTITEM, code, 0); }
+	if(code != TVGN_CARET) {
+		if(!validate(item)) { return sendTreeMsg(TVM_SELECTITEM, code, 0); }
+		display(*item);
+		return sendTreeMsg(TVM_SELECTITEM, code, reinterpret_cast<LPARAM>(item->handle));
+	}
+
+	if(!validate(item)) {
+		clearSelection();
+		selected = nullptr;
+		beginSelectionSync();
+		auto result = sendTreeMsg(TVM_SELECTITEM, code, 0);
+		endSelectionSync();
+		return result != FALSE;
+	}
+
+	clearSelection(item);
+	setSelectedState(item, true);
+	selected = item;
 	display(*item);
-	return sendTreeMsg(TVM_SELECTITEM, code, reinterpret_cast<LPARAM>(item->handle));
+	beginSelectionSync();
+	auto result = sendTreeMsg(TVM_SELECTITEM, code, reinterpret_cast<LPARAM>(item->handle));
+	endSelectionSync();
+	raiseAccessibleItemEvent(
+		reinterpret_cast<accessibility::ItemId>(selected), 20012);
+	return result != FALSE;
 }
 
 void VirtualTree::handleSelected(Item* item) {
 	selected = validate(item) ? item : nullptr;
 	if(selected) {
+		if(!multiSelect()) {
+			clearSelection(selected);
+		}
+		setSelectedState(selected, true, false);
 		raiseAccessibleItemEvent(
 			reinterpret_cast<accessibility::ItemId>(selected), 20012);
 	}
@@ -590,11 +781,31 @@ bool VirtualTree::handleSetItem(TVITEMEX& tv) {
 	if(tv.mask & TVIF_IMAGE) { item->image = tv.iImage; }
 	if(tv.mask & TVIF_PARAM) { item->lParam = tv.lParam; }
 	if(tv.mask & TVIF_SELECTEDIMAGE) { item->selectedImage = tv.iSelectedImage; }
-	if(tv.mask & TVIF_STATE) { item->state &= ~tv.stateMask; item->state |= tv.state & tv.stateMask; }
+	if(tv.mask & TVIF_STATE) {
+		if(tv.stateMask & TVIS_SELECTED) {
+			setSelectedState(item, (tv.state & TVIS_SELECTED) != 0, false);
+		}
+		item->state &= ~tv.stateMask;
+		item->state |= tv.state & tv.stateMask;
+		if((tv.stateMask & TVIS_SELECTED) && item->selected()) {
+			if(!multiSelect()) {
+				clearSelection(item);
+			}
+			if(!selected) {
+				selected = item;
+			}
+		} else if((tv.stateMask & TVIS_SELECTED) && selected == item) {
+			selected = firstSelected();
+		}
+	}
 	if(tv.mask & TVIF_TEXT) { item->setText(tv.pszText); }
 	if(item->handle) {
+		auto virtualHandle = tv.hItem;
 		tv.hItem = item->handle;
+		beginSelectionSync();
 		sendTreeMsg(TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&tv));
+		endSelectionSync();
+		tv.hItem = virtualHandle;
 	}
 	return true;
 }
@@ -670,6 +881,14 @@ void VirtualTree::display(Item& item) {
 	tvis.itemex.lParam = item.lParam;
 	item.handle = reinterpret_cast<HTREEITEM>(sendTreeMsg(TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvis)));
 
+	if(item.selected()) {
+		updateNativeSelectedState(&item);
+	}
+	if(&item == selected) {
+		beginSelectionSync();
+		sendTreeMsg(TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(item.handle));
+		endSelectionSync();
+	}
 	if(expanded) { sendTreeMsg(TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(item.handle)); }
 }
 
@@ -681,7 +900,9 @@ void VirtualTree::hide(Item& item) {
 		hide(*child);
 		child = child->next;
 	}
+	beginSelectionSync();
 	sendTreeMsg(TVM_DELETEITEM, 0, reinterpret_cast<LPARAM>(item.handle));
+	endSelectionSync();
 	item.handle = nullptr;
 }
 
@@ -702,8 +923,97 @@ void VirtualTree::remove(Item* item) {
 	}
 	if(item->prev) { item->prev->next = item->next; }
 	if(item->next) { item->next->prev = item->prev; }
-	if(item == selected) { selected = nullptr; }
+	if(item == selected) {
+		item->state &= ~TVIS_SELECTED;
+		selected = firstSelected();
+	}
 	items.erase(*item);
+}
+
+bool VirtualTree::multiSelect() const {
+	return virtualMultiSelect || (getExtendedStyle() & TVS_EX_MULTISELECT) != 0;
+}
+
+size_t VirtualTree::selectedCount() const {
+	size_t result = 0;
+	for(const auto& item: items) {
+		if(&item != root && item.selected()) {
+			++result;
+		}
+	}
+	return result;
+}
+
+VirtualTree::Item* VirtualTree::firstSelected() const {
+	for(auto item = root ? root->firstChild : nullptr; item; item = item->nextItem()) {
+		if(item->selected()) {
+			return item;
+		}
+	}
+	return nullptr;
+}
+
+VirtualTree::Item* VirtualTree::nextSelected(Item* item) const {
+	if(!validate(item)) {
+		return nullptr;
+	}
+	for(auto next = item->nextItem(); next; next = next->nextItem()) {
+		if(next->selected()) {
+			return next;
+		}
+	}
+	return nullptr;
+}
+
+void VirtualTree::clearSelection(Item* except) {
+	for(auto& value: items) {
+		auto item = const_cast<Item*>(&value);
+		if(item == root || item == except || !item->selected()) {
+			continue;
+		}
+		setSelectedState(item, false);
+	}
+}
+
+void VirtualTree::setSelectedState(Item* item, bool value, bool updateNative) {
+	if(!validate(item) || item == root) {
+		return;
+	}
+
+	if(value) {
+		item->state |= TVIS_SELECTED;
+	} else {
+		item->state &= ~TVIS_SELECTED;
+	}
+	if(!value && selected == item) {
+		selected = firstSelected();
+	}
+	if(updateNative) {
+		updateNativeSelectedState(item);
+	}
+}
+
+void VirtualTree::updateNativeSelectedState(Item* item) {
+	if(!validate(item) || !item->handle) {
+		return;
+	}
+
+	TVITEMEX tv = { TVIF_HANDLE | TVIF_STATE, item->handle };
+	tv.stateMask = TVIS_SELECTED;
+	tv.state = item->selected() ? TVIS_SELECTED : 0;
+	beginSelectionSync();
+	sendTreeMsg(TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&tv));
+	endSelectionSync();
+}
+
+void VirtualTree::beginSelectionSync() {
+	++suppressSelectionSync;
+}
+
+void VirtualTree::endSelectionSync() {
+	if(suppressSelectionSync) {
+		--suppressSelectionSync;
+	}
 }
 
 void VirtualTree::updateChildDisplay(Item* item) {
@@ -716,7 +1026,7 @@ void VirtualTree::updateChildDisplay(Item* item) {
 
 void VirtualTree::configureAccessibility() {
 	setAccessibleControlType(accessibility::Tree);
-	if(getAccessibleName().empty()) {
+	if(!handle() || getAccessibleName().empty()) {
 		setAccessibleName(_T("Virtual tree"));
 	}
 

@@ -32,6 +32,8 @@
 #include <dwt/widgets/FolderDialog.h>
 #include <dwt/util/win32/FileDialog.h>
 
+#include <utility>
+
 namespace dwt {
 
 FolderDialog::FolderDialog(Widget* parent) :
@@ -39,6 +41,7 @@ parent(parent),
 pidlRoot(nullptr),
 pidlInitialSel(nullptr),
 options(0),
+forceFilesystem(true),
 hasClientGuid(false)
 {
 }
@@ -91,13 +94,49 @@ FolderDialog& FolderDialog::setClientGuid(const GUID& guid) {
 	return *this;
 }
 
+FolderDialog& FolderDialog::setForceFilesystem(bool force) {
+	forceFilesystem = force;
+	return *this;
+}
+
+FolderDialog& FolderDialog::setInitialFolder(IShellItem* item) {
+	initialFolder.reset(item);
+	return *this;
+}
+
 FolderDialog& FolderDialog::addPlace(const tstring& path, bool top) {
 	places.emplace_back(path, top ? FDAP_TOP : FDAP_BOTTOM);
 	return *this;
 }
 
+FolderDialog& FolderDialog::addPlace(IShellItem* item, bool top) {
+	if(item) {
+		shellPlaces.emplace_back(util::win32::ShellItemPtr(item), top ? FDAP_TOP : FDAP_BOTTOM);
+	}
+	return *this;
+}
+
 FolderDialog& FolderDialog::addOptions(FILEOPENDIALOGOPTIONS value) {
 	options |= value;
+	return *this;
+}
+
+FolderDialog& FolderDialog::setFileDialogEvents(const util::win32::FileDialogEvents& value) {
+	events = value;
+	return *this;
+}
+
+FolderDialog& FolderDialog::onFileDialogCustomize(
+	const util::win32::FileDialogCustomizeCallback& callback)
+{
+	customize = callback;
+	return *this;
+}
+
+FolderDialog& FolderDialog::onFileDialogControls(
+	const util::win32::FileDialogControlsCallback& callback)
+{
+	controls = callback;
 	return *this;
 }
 
@@ -109,20 +148,7 @@ bool FolderDialog::open(tstring& dir) {
 		return openRooted(dir);
 	}
 
-	util::win32::FileDialogOptions dialogOptions;
-	dialogOptions.owner = getParentHandle();
-	dialogOptions.pickFolders = true;
-	dialogOptions.title = title;
-	dialogOptions.initialDirectory = initialSel;
-	if(pidlInitialSel) {
-		dialogOptions.initialItem = reinterpret_cast<PCIDLIST_ABSOLUTE>(pidlInitialSel);
-	} else if(pidlRoot) {
-		dialogOptions.initialItem = reinterpret_cast<PCIDLIST_ABSOLUTE>(pidlRoot);
-	}
-	dialogOptions.places = places;
-	dialogOptions.options = options;
-	dialogOptions.clientGuid = hasClientGuid ? &clientGuid : nullptr;
-
+	auto dialogOptions = getModernOptions();
 	std::vector<tstring> paths;
 	if(!util::win32::showFileDialog(dialogOptions, paths)) {
 		return false;
@@ -132,6 +158,41 @@ bool FolderDialog::open(tstring& dir) {
 		dir += _T('\\');
 	}
 	return true;
+}
+
+bool FolderDialog::openShellItem(util::win32::FileDialogResult& result) {
+	auto dialogOptions = getModernOptions();
+	dialogOptions.forceFilesystem = false;
+
+	std::vector<util::win32::FileDialogResult> results;
+	if(!util::win32::showFileDialogItems(dialogOptions, results)) {
+		return false;
+	}
+	result = std::move(results.front());
+	return true;
+}
+
+util::win32::FileDialogOptions FolderDialog::getModernOptions() const {
+	util::win32::FileDialogOptions dialogOptions;
+	dialogOptions.owner = getParentHandle();
+	dialogOptions.pickFolders = true;
+	dialogOptions.title = title;
+	dialogOptions.initialDirectory = initialSel;
+	dialogOptions.forceFilesystem = forceFilesystem;
+	if(pidlInitialSel) {
+		dialogOptions.initialItem = reinterpret_cast<PCIDLIST_ABSOLUTE>(pidlInitialSel);
+	} else if(pidlRoot) {
+		dialogOptions.initialItem = reinterpret_cast<PCIDLIST_ABSOLUTE>(pidlRoot);
+	}
+	dialogOptions.initialFolder = initialFolder;
+	dialogOptions.places = places;
+	dialogOptions.shellPlaces = shellPlaces;
+	dialogOptions.options = options;
+	dialogOptions.clientGuid = hasClientGuid ? &clientGuid : nullptr;
+	dialogOptions.events = events.empty() ? nullptr : &events;
+	dialogOptions.customize = customize;
+	dialogOptions.controls = controls;
+	return dialogOptions;
 }
 
 bool FolderDialog::openRooted(tstring& dir) {

@@ -195,7 +195,7 @@ tstring RichTextBox::textUnderCursor(const ScreenCoordinate& p, bool includeSpac
 	tstring tmp = getText();
 
 	tstring::size_type start = tmp.find_last_of(includeSpaces ? _T("<\t\r\n") : _T(" <\t\r\n"),
-		fixupLineEndings(tmp.begin(), tmp.end(), charFromPos(p)));
+		fixupLineEndings(tmp.begin(), tmp.end(), charFromPos(p) - 1));
 	if(start == tstring::npos)
 		start = 0;
 	else
@@ -341,9 +341,9 @@ void RichTextBox::findText(tstring const& needle) {
 		setFocus();
 		sendMessage(EM_EXSETSEL, 0, reinterpret_cast< LPARAM >(&ft.chrg));
 	} else {
-#ifdef PORT_ME
-		addStatus(T_("String not found: ") + needle);
-#endif
+		if(searchNotFound) {
+			searchNotFound(needle);
+		}
 		clearCurrentNeedle();
 	}
 }

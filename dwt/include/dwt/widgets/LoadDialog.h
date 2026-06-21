@@ -75,6 +75,9 @@ public:
 	  */
 	bool openMultiple(std::vector<tstring>& files, unsigned flags = 0);
 
+	bool openShellItem(util::win32::FileDialogResult& result, unsigned flags = 0);
+	bool openShellItems(std::vector<util::win32::FileDialogResult>& results, unsigned flags = 0);
+
 	// Constructor Taking pointer to parent
 	explicit LoadDialog( Widget * parent = 0 );
 

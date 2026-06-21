@@ -476,6 +476,7 @@ public:
 protected:
 	/// Adds or Removes extended list view styles from the list view
 	void addRemoveTableExtendedStyle( DWORD addStyle, bool add );
+	void setFontImpl();
 
 	// Protected to avoid direct instantiation, you can inherit and use
 	// WidgetFactory class which is friend

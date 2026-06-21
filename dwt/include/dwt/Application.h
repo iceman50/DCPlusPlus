@@ -112,7 +112,9 @@ public:
 	FilterIter addFilter(const FilterFunction& f);
 	void removeFilter(const FilterIter& i);
 
-	/** Run a function on the GUI thread asynchronously */
+	/** Run a function on the GUI thread asynchronously.
+	 * Callbacks are processed in the same FIFO order in which they are queued.
+	 */
 	void callAsync(const Callback& f);
 
 	/** Runs the message pump, and doesn't return until application should quit.
@@ -125,6 +127,20 @@ public:
 	 * @return true if there are more messages to dispatch, false otherwise
 	 */
 	bool dispatch();
+
+	/**
+	 * Process all pending UI messages and asynchronous callbacks without blocking.
+	 *
+	 * This can be called periodically by lengthy work running on the GUI thread to
+	 * keep the interface responsive. Message handlers may run before this function
+	 * returns, so callers must account for reentrancy and objects being closed or
+	 * destroyed by user actions. Pending asynchronous callbacks retain their FIFO
+	 * ordering, including callbacks queued while messages are being processed.
+	 *
+	 * @return true if the application should keep running, false if a quit message
+	 * was processed
+	 */
+	bool processMessages();
 
 	/**
 	 * Block until the main GUI thread has something to do.
@@ -191,6 +207,7 @@ private:
 
 	std::queue<Callback> tasks;
 	std::mutex tasksMutex;
+	bool dispatchingAsync;
 
 	FilterList filters;
 

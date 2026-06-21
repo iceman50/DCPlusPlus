@@ -33,6 +33,8 @@
 
 #include <vsstyle.h>
 
+#include <algorithm>
+
 #include <dwt/CanvasClasses.h>
 #include <dwt/resources/ImageList.h>
 #include <dwt/resources/Pen.h>
@@ -80,6 +82,7 @@ bool TableTree::handleMessage(const MSG& msg, LRESULT& retVal) {
 		{
 			items.clear();
 			children.clear();
+			storedRows.clear();
 			raiseAccessibleStructureChanged();
 			break;
 		}
@@ -98,7 +101,14 @@ bool TableTree::handleMessage(const MSG& msg, LRESULT& retVal) {
 		}
 	case LVM_SETITEM:
 		{
-			dwtDebugFail("TableTree LVM_SETITEM not implemented");
+			handleSetItem(*reinterpret_cast<LVITEM*>(msg.lParam));
+			break;
+		}
+	case LVM_SETITEMTEXT:
+		{
+			auto item = *reinterpret_cast<LVITEM*>(msg.lParam);
+			item.mask = LVIF_TEXT;
+			handleSetItem(item, static_cast<int>(msg.wParam));
 			break;
 		}
 	}
@@ -106,16 +116,45 @@ bool TableTree::handleMessage(const MSG& msg, LRESULT& retVal) {
 }
 
 void TableTree::insertChild(LPARAM parentParam, LPARAM child) {
-	items[parentParam].children.push_back(child);
+	if(!parentParam || !child || parentParam == child) {
+		dwtDebugFail("TableTree hierarchy requires distinct non-null item data");
+		return;
+	}
+
+	auto existingParent = children.find(child);
+	if(existingParent != children.end()) {
+		if(existingParent->second == parentParam) {
+			return;
+		}
+		auto& oldSiblings = items[existingParent->second].children;
+		oldSiblings.erase(std::remove(oldSiblings.begin(), oldSiblings.end(), child),
+			oldSiblings.end());
+		if(oldSiblings.empty()) {
+			auto& oldParent = items[existingParent->second];
+			oldParent.expanded = false;
+			oldParent.glyphRect = Rectangle();
+			oldParent.redrawGlyph(*this);
+		}
+		children.erase(existingParent);
+	}
+
+	auto& parent = items[parentParam];
+	if(std::find(parent.children.begin(), parent.children.end(), child) ==
+		parent.children.end()) {
+		parent.children.push_back(child);
+	}
 	children[child] = parentParam;
 
-	if(items[parentParam].expanded) {
-		LVITEM item = { LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM | LVIF_INDENT, findData(parentParam) + 1 };
-		item.pszText = LPSTR_TEXTCALLBACK;
-		item.iImage = I_IMAGECALLBACK;
-		item.lParam = child;
-		item.iIndent = 2;
-		sendMsg(LVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&item));
+	auto childRow = findData(child);
+	if(parent.expanded) {
+		if(childRow >= 0) {
+			sendMsg(LVM_DELETEITEM, childRow, 0);
+		}
+		insertStoredRow(child, findData(parentParam) + 1, 2);
+		resort();
+	} else if(childRow >= 0) {
+		// A collapsed parent owns the row, but the native list must not display it.
+		sendMsg(LVM_DELETEITEM, childRow, 0);
 	}
 	raiseAccessibleStructureChanged();
 }
@@ -131,16 +170,23 @@ void TableTree::eraseChild(LPARAM child) {
 void TableTree::collapse(LPARAM parentParam) {
 	util::HoldRedraw hold { this };
 
+	auto parent = items.find(parentParam);
+	if(parent == items.end() || !parent->second.expanded) {
+		return;
+	}
 	auto pos = findData(parentParam);
-	auto n = items[parentParam].children.size();
+	if(pos < 0) {
+		return;
+	}
+	auto n = parent->second.children.size();
 
 	// assume children are all at the right pos.
 	for(size_t i = 0; i < n; ++i) {
 		sendMsg(LVM_DELETEITEM, pos + 1, 0);
 	}
 
-	items[parentParam].expanded = false;
-	items[parentParam].redrawGlyph(*this);
+	parent->second.expanded = false;
+	parent->second.redrawGlyph(*this);
 	raiseAccessibleStructureChanged();
 
 	// special case, see TableTreeTest
@@ -152,24 +198,35 @@ void TableTree::collapse(LPARAM parentParam) {
 void TableTree::expand(LPARAM parentParam) {
 	util::HoldRedraw hold { this };
 
-	LVITEM item = { LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM | LVIF_INDENT, findData(parentParam) };
-	item.pszText = LPSTR_TEXTCALLBACK;
-	item.iImage = I_IMAGECALLBACK;
-	item.iIndent = 2;
-	for(auto child: items[parentParam].children) {
-		++item.iItem;
-		item.lParam = child;
-		sendMsg(LVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&item));
+	auto parent = items.find(parentParam);
+	if(parent == items.end() || parent->second.expanded) {
+		return;
+	}
+	auto position = findData(parentParam);
+	if(position < 0) {
+		return;
+	}
+	for(auto child: parent->second.children) {
+		if(findData(child) < 0) {
+			insertStoredRow(child, ++position, 2);
+		}
 	}
 
 	resort();
 
-	items[parentParam].expanded = true;
-	items[parentParam].redrawGlyph(*this);
+	parent->second.expanded = true;
+	parent->second.redrawGlyph(*this);
 	raiseAccessibleStructureChanged();
 }
 
 TableTree::Item::Item() : expanded(false)
+{
+}
+
+TableTree::StoredRow::StoredRow() :
+	image(I_IMAGENONE),
+	hasImage(false),
+	imageCallback(false)
 {
 }
 
@@ -323,6 +380,7 @@ void TableTree::handleDelete(int pos) {
 		}
 		for(auto child: parentItem->second.children) {
 			children.erase(child);
+			storedRows.erase(child);
 		}
 		items.erase(parentItem);
 	}
@@ -331,17 +389,25 @@ void TableTree::handleDelete(int pos) {
 	if(child != children.end()) {
 		eraseChild(child, true);
 	}
+	storedRows.erase(param);
 }
 
 void TableTree::handleInsert(LVITEM& lv) {
-	if((lv.mask & LVIF_TEXT) == LVIF_TEXT && lv.pszText != LPSTR_TEXTCALLBACK) {
-		dwtDebugFail("TableTree non-callback texts not implemented");
-	}
-	if((lv.mask & LVIF_IMAGE) == LVIF_IMAGE && lv.iImage != I_IMAGECALLBACK) {
-		dwtDebugFail("TableTree non-callback images not implemented");
-	}
-	if((lv.mask & LVIF_PARAM) != LVIF_PARAM || !lv.lParam) {
-		dwtDebugFail("TableTree null LPARAM not implemented");
+	if((lv.mask & LVIF_PARAM) == LVIF_PARAM && lv.lParam) {
+		auto& row = storedRows[lv.lParam];
+		if((lv.mask & LVIF_TEXT) == LVIF_TEXT) {
+			row.texts.resize(1);
+			row.textCallbacks.resize(1);
+			row.textCallbacks[0] = lv.pszText == LPSTR_TEXTCALLBACK;
+			if(!row.textCallbacks[0] && lv.pszText) {
+				row.texts[0] = lv.pszText;
+			}
+		}
+		if((lv.mask & LVIF_IMAGE) == LVIF_IMAGE) {
+			row.image = lv.iImage;
+			row.hasImage = true;
+			row.imageCallback = lv.iImage == I_IMAGECALLBACK;
+		}
 	}
 
 	// add indentation to draw tree lines.
@@ -349,6 +415,138 @@ void TableTree::handleInsert(LVITEM& lv) {
 		lv.mask |= LVIF_INDENT;
 	}
 	lv.iIndent = 1;
+}
+
+void TableTree::handleSetItem(LVITEM& lv, int itemIndex) {
+	const auto rowIndex = itemIndex >= 0 ? itemIndex : lv.iItem;
+	if(rowIndex < 0 || rowIndex >= static_cast<int>(size())) {
+		return;
+	}
+
+	auto oldData = getData(rowIndex);
+	auto newData = ((lv.mask & LVIF_PARAM) == LVIF_PARAM) ? lv.lParam : oldData;
+	if((lv.mask & LVIF_PARAM) == LVIF_PARAM && newData != oldData) {
+		const bool hierarchyNeedsIdentity = !newData && oldData &&
+			(items.find(oldData) != items.end() || children.find(oldData) != children.end());
+		const bool duplicate = newData && (findData(newData) >= 0 ||
+			storedRows.find(newData) != storedRows.end() ||
+			items.find(newData) != items.end() || children.find(newData) != children.end());
+		if(hierarchyNeedsIdentity || duplicate) {
+			dwtDebugFail("TableTree hierarchy item data must be unique and non-null");
+			lv.lParam = oldData;
+			newData = oldData;
+		} else {
+			remapData(oldData, newData);
+		}
+	}
+
+	if(newData) {
+		auto& row = storedRows[newData];
+		if((lv.mask & LVIF_TEXT) == LVIF_TEXT && lv.iSubItem >= 0) {
+			auto column = static_cast<size_t>(lv.iSubItem);
+			if(row.texts.size() <= column) {
+				row.texts.resize(column + 1);
+				row.textCallbacks.resize(column + 1);
+			}
+			row.textCallbacks[column] = lv.pszText == LPSTR_TEXTCALLBACK;
+			if(!row.textCallbacks[column]) {
+				row.texts[column] = lv.pszText ? lv.pszText : _T("");
+			}
+		}
+		if((lv.mask & LVIF_IMAGE) == LVIF_IMAGE && lv.iSubItem == 0) {
+			row.image = lv.iImage;
+			row.hasImage = true;
+			row.imageCallback = lv.iImage == I_IMAGECALLBACK;
+		}
+	}
+
+	if((lv.mask & LVIF_INDENT) == LVIF_INDENT) {
+		lv.iIndent = children.find(newData) == children.end() ? 1 : 2;
+	}
+}
+
+void TableTree::insertStoredRow(LPARAM data, int index, int itemIndent) {
+	auto found = storedRows.find(data);
+	LVITEM item = { LVIF_PARAM | LVIF_INDENT, index };
+	item.lParam = data;
+	item.iIndent = itemIndent;
+
+	if(found == storedRows.end()) {
+		// Preserve the historical callback-backed mode for data-only child rows.
+		item.mask |= LVIF_TEXT | LVIF_IMAGE;
+		item.pszText = LPSTR_TEXTCALLBACK;
+		item.iImage = I_IMAGECALLBACK;
+	} else {
+		auto& row = found->second;
+		if(!row.texts.empty() || !row.textCallbacks.empty()) {
+			item.mask |= LVIF_TEXT;
+			item.pszText = !row.textCallbacks.empty() && row.textCallbacks[0] ?
+				LPSTR_TEXTCALLBACK : const_cast<LPTSTR>(row.texts[0].c_str());
+		}
+		if(row.hasImage) {
+			item.mask |= LVIF_IMAGE;
+			item.iImage = row.imageCallback ? I_IMAGECALLBACK : row.image;
+		}
+	}
+
+	auto inserted = static_cast<int>(sendMsg(LVM_INSERTITEM, 0,
+		reinterpret_cast<LPARAM>(&item)));
+	if(inserted < 0 || found == storedRows.end()) {
+		return;
+	}
+
+	auto& row = found->second;
+	for(size_t column = 1; column < row.texts.size(); ++column) {
+		LVITEM subItem = { LVIF_TEXT, inserted, static_cast<int>(column) };
+		subItem.pszText = column < row.textCallbacks.size() &&
+			row.textCallbacks[column] ? LPSTR_TEXTCALLBACK :
+			const_cast<LPTSTR>(row.texts[column].c_str());
+		sendMsg(LVM_SETITEM, 0, reinterpret_cast<LPARAM>(&subItem));
+	}
+}
+
+void TableTree::remapData(LPARAM oldData, LPARAM newData) {
+	if(oldData == newData) {
+		return;
+	}
+
+	if(oldData) {
+		auto row = storedRows.find(oldData);
+		if(row != storedRows.end()) {
+			auto value = std::move(row->second);
+			storedRows.erase(row);
+			if(newData) {
+				storedRows.emplace(newData, std::move(value));
+			}
+		}
+
+		auto parent = items.find(oldData);
+		if(parent != items.end()) {
+			auto value = std::move(parent->second);
+			items.erase(parent);
+			if(newData) {
+				auto inserted = items.emplace(newData, std::move(value));
+				for(auto childData : inserted.first->second.children) {
+					children[childData] = newData;
+				}
+			}
+		}
+
+		auto child = children.find(oldData);
+		if(child != children.end()) {
+			auto parentData = child->second;
+			auto& siblings = items[parentData].children;
+			std::replace(siblings.begin(), siblings.end(), oldData, newData);
+			children.erase(child);
+			if(newData) {
+				children[newData] = parentData;
+			} else {
+				siblings.erase(std::remove(siblings.begin(), siblings.end(), LPARAM()),
+					siblings.end());
+			}
+		}
+	}
+	raiseAccessibleStructureChanged();
 }
 
 int TableTree::handleSort(LPARAM& lhs, LPARAM& rhs) {

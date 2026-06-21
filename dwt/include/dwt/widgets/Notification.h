@@ -36,6 +36,7 @@
 
 #include <deque>
 #include <functional>
+#include <optional>
 
 namespace dwt {
 
@@ -68,10 +69,26 @@ public:
 
 	typedef std::function<void ()> Callback;
 
+	struct MessageOptions {
+		Callback callback;
+		IconPtr balloonIcon;
+		bool realTime = false;
+		bool respectQuietTime = false;
+		bool largeIcon = false;
+		bool noSound = false;
+	};
+
 	/** show a balloon popup.
 	@param callback callback called when the balloon has been clicked.
 	@param balloonIcon icon shown next to the title. */
 	void addMessage(const tstring& title, const tstring& message, const Callback& callback, const IconPtr& balloonIcon = 0);
+	void addMessage(const tstring& title, const tstring& message, const MessageOptions& options);
+
+	void setGuid(const GUID& guid);
+	void clearGuid();
+	bool hasGuid() const { return static_cast<bool>(guid); }
+	DWORD getLastNotifyError() const { return lastNotifyError; }
+	bool lastNotifySucceeded() const { return lastNotifyError == ERROR_SUCCESS; }
 
 	void onContextMenu(Callback callback) { contextMenu = callback; }
 
@@ -83,6 +100,7 @@ public:
 
 	/// This is sent when the tooltip text should be updated
 	void onUpdateTip(Callback callback) { updateTip = callback; }
+	void onBalloonShown(Callback callback) { balloonShown = callback; }
 	void onPopupOpened(Callback callback) { popupOpened = callback; }
 	void onPopupClosed(Callback callback) { popupClosed = callback; }
 
@@ -95,6 +113,8 @@ private:
 
 	bool visible;
 	bool ignoreNextClick; // true after a double-click
+	std::optional<GUID> guid;
+	DWORD lastNotifyError;
 
 	tstring tip;
 
@@ -102,6 +122,7 @@ private:
 	Callback iconClicked;
 	Callback iconDbClicked;
 	Callback updateTip;
+	Callback balloonShown;
 	Callback popupOpened;
 	Callback popupClosed;
 
@@ -109,6 +130,7 @@ private:
 	bool onlyBalloons; /// the tray icon has been created solely for balloons; it will disappear afterwards.
 
 	NOTIFYICONDATA makeNID() const;
+	bool notify(DWORD message, NOTIFYICONDATA& nid);
 
 	/// Last tick that tip was updated
 	ULONGLONG lastTick;

@@ -84,6 +84,9 @@ public:
 			FontPtr font_ = 0);
 		bool popup;
 		bool ownerDrawn;
+		/// Use regular WM_COMMAND menu notifications instead of WM_MENUCOMMAND.
+		/// This is useful for native Win32 integrations such as MDI window menus.
+		bool commandMessages;
 		Point iconSize;
 		FontPtr font;
 	};
@@ -286,6 +289,7 @@ private:
 
 	bool ownerDrawn;
 	bool popup;
+	bool commandMessages;
 
 	// its sub menus
 	std::vector<std::unique_ptr<Menu>> itsChildren;
@@ -293,6 +297,7 @@ private:
 	std::vector<std::unique_ptr<ItemDataWrapper>> itsItemData;
 
 	static const unsigned id_offset = 100;
+	static const unsigned command_id_offset = 30000;
 	typedef std::unique_ptr<std::vector<Dispatcher::F> > commands_type;
 	commands_type commands; // just a pointer because sub-menus don't need this
 

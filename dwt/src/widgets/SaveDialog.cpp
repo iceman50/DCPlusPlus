@@ -31,6 +31,8 @@
 
 #include <dwt/widgets/SaveDialog.h>
 
+#include <utility>
+
 namespace dwt {
 
 bool SaveDialog::openImpl(tstring& file, unsigned flags) {
@@ -42,6 +44,22 @@ bool SaveDialog::openImpl(tstring& file, unsigned flags) {
 		return false;
 	}
 	file = files.front();
+	return true;
+}
+
+bool SaveDialog::openShellItem(util::win32::FileDialogResult& result, unsigned flags) {
+	auto options = getOptions(true);
+	options.forceFilesystem = false;
+	options.legacyFlags = flags;
+	if(!result.path.empty()) {
+		options.initialFileName = result.path;
+	}
+
+	std::vector<util::win32::FileDialogResult> results;
+	if(!util::win32::showFileDialogItems(options, results)) {
+		return false;
+	}
+	result = std::move(results.front());
 	return true;
 }
 

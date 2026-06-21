@@ -99,7 +99,11 @@ public:
 	  */
 	void onDateTimeChanged(std::function<void (const SYSTEMTIME &)> f) {
 		addCallback(Message(WM_NOTIFY, DTN_DATETIMECHANGE), [f](const MSG& msg, LRESULT&) -> bool {
-			f(reinterpret_cast<NMDATETIMECHANGE*>(msg.lParam)->st);
+			auto data = reinterpret_cast<NMDATETIMECHANGE*>(msg.lParam);
+			if(!data) {
+				return false;
+			}
+			f(data->st);
 			return true;
 		});
 	}
@@ -120,9 +124,14 @@ public:
 	void getRange(std::optional<SYSTEMTIME>& minimum, std::optional<SYSTEMTIME>& maximum);
 	Point getIdealSize() const;
 	void closeMonthCalendar();
+	HWND getMonthCalendarHandle() const;
+	HFONT getMonthCalendarFont() const;
+	void setMonthCalendarFont(FontPtr font, bool redraw = true);
 	DWORD setMonthCalendarStyle(DWORD style);
 	DWORD getMonthCalendarStyle() const;
 	DATETIMEPICKERINFO getPickerInfo() const;
+	void onFormatQuery(std::function<Point (const NMDATETIMEFORMATQUERY&)> f);
+	void onFormat(std::function<tstring (const NMDATETIMEFORMAT&)> f);
 
 	/// Sets the format to use when displaying the date and time in the control
 	/** The format can be any combinations in any order of the given ones
@@ -204,6 +213,7 @@ protected:
 private:
 	friend class ChainingDispatcher;
 	static const TCHAR windowClass[];
+	tstring formatCallbackText;
 
 	// aspects::Clickable
 	static Message getClickMessage();
@@ -272,6 +282,20 @@ inline void DateTime::closeMonthCalendar() {
 	sendMessage(DTM_CLOSEMONTHCAL);
 }
 
+inline HWND DateTime::getMonthCalendarHandle() const {
+	return reinterpret_cast<HWND>(sendMessage(DTM_GETMONTHCAL));
+}
+
+inline HFONT DateTime::getMonthCalendarFont() const {
+	return reinterpret_cast<HFONT>(sendMessage(DTM_GETMCFONT));
+}
+
+inline void DateTime::setMonthCalendarFont(FontPtr font, bool redraw) {
+	sendMessage(DTM_SETMCFONT,
+		reinterpret_cast<WPARAM>(font ? font->handle() : nullptr),
+		redraw ? TRUE : FALSE);
+}
+
 inline DWORD DateTime::setMonthCalendarStyle(DWORD style) {
 	return static_cast<DWORD>(sendMessage(DTM_SETMCSTYLE, 0, style));
 }
@@ -284,6 +308,35 @@ inline DATETIMEPICKERINFO DateTime::getPickerInfo() const {
 	DATETIMEPICKERINFO info = { sizeof(DATETIMEPICKERINFO) };
 	sendMessage(DTM_GETDATETIMEPICKERINFO, 0, reinterpret_cast<LPARAM>(&info));
 	return info;
+}
+
+inline void DateTime::onFormatQuery(
+	std::function<Point (const NMDATETIMEFORMATQUERY&)> f)
+{
+	addCallback(Message(WM_NOTIFY, DTN_FORMATQUERY),
+		[f](const MSG& msg, LRESULT&) -> bool {
+			auto data = reinterpret_cast<NMDATETIMEFORMATQUERY*>(msg.lParam);
+			if(!data) {
+				return false;
+			}
+			auto size = f(*data);
+			data->szMax.cx = size.x;
+			data->szMax.cy = size.y;
+			return true;
+		});
+}
+
+inline void DateTime::onFormat(std::function<tstring (const NMDATETIMEFORMAT&)> f) {
+	addCallback(Message(WM_NOTIFY, DTN_FORMAT),
+		[this, f](const MSG& msg, LRESULT&) -> bool {
+			auto data = reinterpret_cast<NMDATETIMEFORMAT*>(msg.lParam);
+			if(!data) {
+				return false;
+			}
+			formatCallbackText = f(*data);
+			data->pszDisplay = const_cast<LPTSTR>(formatCallbackText.c_str());
+			return true;
+		});
 }
 
 inline void DateTime::setFormat( const tstring & format )

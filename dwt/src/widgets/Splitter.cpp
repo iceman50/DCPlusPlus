@@ -157,6 +157,9 @@ bool Splitter::handleMouseMove(const MouseEvent& mouseEvent) {
 		ClientCoordinate cc(mouseEvent.pos, getParent());
 		double mpos = horizontal ? cc.y() : cc.x();
 		double size = horizontal ? getParent()->getClientSize().y : getParent()->getClientSize().x;
+		if(size <= 0.) {
+			return true;
+		}
 		pos = mpos / size;
 		getParent()->checkSplitterPos(this);
 		getParent()->onMove();

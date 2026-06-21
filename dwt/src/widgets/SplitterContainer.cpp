@@ -84,7 +84,11 @@ void SplitterContainer::layout() {
 	auto splitters = getChildren<Splitter>();
 
 	auto rc = Rectangle(getClientSize());
-	util::HoldResize hr(this, std::distance(children.first, children.second));
+	// Pane windows move across one another while dragging. Do not let Windows copy
+	// their old client pixels into the new positions; those pixels can contain text
+	// from the opposite pane and leave visible trails during rapid movement.
+	util::HoldResize hr(this, std::distance(children.first, children.second),
+		SWP_NOCOPYBITS);
 
 	if(maximized) {
 		std::for_each(children.first, children.second, [&](Widget *w) {
@@ -180,7 +184,8 @@ void SplitterContainer::checkSplitterPos(SplitterPtr splitter) {
 
 void SplitterContainer::onMove() {
 	layout();
-	redraw(true);
+	::RedrawWindow(handle(), nullptr, nullptr,
+		RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 }
 
 void SplitterContainer::maximize(Widget* w) {

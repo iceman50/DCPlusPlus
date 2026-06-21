@@ -28,7 +28,11 @@ namespace dwt { namespace util {
 
 class HoldResize {
 public:
-	HoldResize(Widget *parent, size_t hint) : parent(parent) { sizes.reserve(hint); }
+	HoldResize(Widget *parent, size_t hint, UINT additionalFlags = 0) :
+		parent(parent), flags(SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE |
+			additionalFlags) {
+		sizes.reserve(hint);
+	}
 
 	~HoldResize() {
 		if(sizes.empty()) {
@@ -49,11 +53,12 @@ private:
 
 	Widget *parent;
 	std::vector<WINDOWPOS> sizes;
+	UINT flags;
 
 	bool resizeDefered() {
 		auto h = ::BeginDeferWindowPos(static_cast<int>(sizes.size()));
 		for(auto& i: sizes) {
-			h = ::DeferWindowPos(h, i.hwnd, NULL, i.x, i.y, i.cx, i.cy, SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+			h = ::DeferWindowPos(h, i.hwnd, NULL, i.x, i.y, i.cx, i.cy, flags);
 			if(h == NULL) {
 				return false;
 			}
@@ -68,7 +73,7 @@ private:
 
 	void resizeNormal() {
 		for(auto& i: sizes) {
-			::SetWindowPos(i.hwnd, NULL, i.x, i.y, i.cx, i.cy, SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+			::SetWindowPos(i.hwnd, NULL, i.x, i.y, i.cx, i.cy, flags);
 		}
 	}
 };

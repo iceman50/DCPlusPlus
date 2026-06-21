@@ -329,15 +329,24 @@ const accessibility::ItemProvider* Widget::getAccessibleItems() const {
 }
 
 void Widget::raiseAccessibleEvent(long eventId) {
+	if(!hwnd || !::IsWindow(hwnd) || !::IsWindowVisible(hwnd)) {
+		return;
+	}
 	util::win32::raiseAccessibilityEvent(accessibilityProvider, eventId);
 }
 
 void Widget::raiseAccessibleItemEvent(accessibility::ItemId item, long eventId) {
+	if(!hwnd || !::IsWindow(hwnd) || !::IsWindowVisible(hwnd)) {
+		return;
+	}
 	util::win32::raiseAccessibilityItemEvent(
 		accessibilityProvider, item, eventId);
 }
 
 void Widget::raiseAccessibleStructureChanged() {
+	if(!hwnd || !::IsWindow(hwnd) || !::IsWindowVisible(hwnd)) {
+		return;
+	}
 	util::win32::raiseAccessibilityStructureChanged(accessibilityProvider);
 }
 

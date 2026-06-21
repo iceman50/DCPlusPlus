@@ -55,7 +55,8 @@ tabStyle(WinDefault),
 font(0),
 widthConfig(widthConfig_),
 toggleActive(toggleActive_),
-ctrlTab(ctrlTab_)
+ctrlTab(ctrlTab_),
+closeable(true)
 {
 }
 
@@ -64,6 +65,7 @@ BaseType(w, ChainingDispatcher::superClass<TabView>()),
 Taskbar(),
 tip(0),
 toggleActive(false),
+closeable(true),
 font(0),
 boldFont(0),
 inTab(false),
@@ -171,6 +173,7 @@ void TabView::create(const Seed & cs) {
 
 	widthConfig = cs.widthConfig;
 	toggleActive = cs.toggleActive;
+	closeable = cs.closeable;
 
 	if (!TabCtrl_SetItemExtra(handle(), sizeof(TCITEMEXTRADATA))) {
 		throw Win32Exception("Error while trying to set extra tab item data size");
@@ -218,6 +221,7 @@ void TabView::create(const Seed & cs) {
 	onMiddleMouseDown([this](const MouseEvent& me) { return handleMiddleMouseDown(me); });
 	onMiddleMouseUp([this](const MouseEvent& me) { return handleMiddleMouseUp(me); });
 	onXMouseUp([this](const MouseEvent& me) { return handleXMouseUp(me); });
+	onMouseWheel([this](const MouseEvent&, int delta) { handleMouseWheel(delta); });
 
 	if(cs.style & TCS_TOOLTIPS) {
 		tip = WidgetCreator<ToolTip>::attach(this, TabCtrl_GetToolTips(handle())); // created and managed by the tab control thanks to the TCS_TOOLTIPS style
@@ -634,7 +638,7 @@ bool TabView::handleLeftMouseDown(const MouseEvent& mouseEvent) {
 	if(ti) {
 		dragging = ti->w;
 		::SetCapture(handle());
-		if(hasStyle(TCS_OWNERDRAWFIXED)) {
+		if(closeable && hasStyle(TCS_OWNERDRAWFIXED)) {
 			int index = findTab(dragging);
 			if(index == active) {
 				closeAuthorized = inCloseRect(mouseEvent.pos);
@@ -672,7 +676,8 @@ bool TabView::handleLeftMouseUp(const MouseEvent& mouseEvent) {
 		if(dropPos == dragPos) {
 			// the tab hasn't moved; handle the click
 			if(dropPos == active) {
-				if(mouseEvent.isShiftPressed || (closeAuth && inCloseRect(mouseEvent.pos))) {
+				if(closeable && (mouseEvent.isShiftPressed ||
+					(closeAuth && inCloseRect(mouseEvent.pos)))) {
 					TabInfo* ti = getTabInfo(active);
 					if(ti)
 						ti->w->close();
@@ -734,6 +739,9 @@ bool TabView::handleContextMenu(ScreenCoordinate pt) {
 }
 
 bool TabView::handleMiddleMouseDown(const MouseEvent& mouseEvent) {
+	if(!closeable) {
+		return true;
+	}
 	TabInfo* ti = getTabInfo(hitTest(mouseEvent.pos));
 	if(ti) {
 		middleClosing = ti->w;
@@ -797,7 +805,7 @@ bool TabView::handleMouseMove(const MouseEvent& mouseEvent) {
 		highlighted = i;
 		onMouseLeave([this]() { handleMouseLeave(); });
 	}
-	if(i != -1 && i == active) {
+	if(closeable && i != -1 && i == active) {
 		if(highlightClose ^ inCloseRect(mouseEvent.pos)) {
 			highlightClose = !highlightClose;
 			if(tip)
@@ -904,7 +912,7 @@ void TabView::draw(Canvas& canvas, unsigned index, Rectangle&& rect, bool isSele
 		rect.size.x -= size.x;
 	}
 
-	if(isSelected)
+	if(isSelected && closeable)
 		rect.size.x -= margin.x + scale(16); // keep some space for the 'X' button
 
 	const tstring text = ti->w->getText();
@@ -917,7 +925,7 @@ void TabView::draw(Canvas& canvas, unsigned index, Rectangle&& rect, bool isSele
 		canvas.drawText(text, rect, dtFormat);
 	}
 
-	if(isSelected) {
+	if(isSelected && closeable) {
 		rect.pos.x = rect.right() + margin.x;
 		rect.size.x = scale(16);
 		if(scale(16) < rect.size.y)
@@ -949,6 +957,8 @@ void TabView::draw(Canvas& canvas, unsigned index, Rectangle&& rect, bool isSele
 
 		closeRect = rect;
 		closeRect.pos = ScreenCoordinate(ClientCoordinate(closeRect.pos, this)).getPoint();
+	} else if(isSelected) {
+		closeRect = Rectangle();
 	}
 }
 

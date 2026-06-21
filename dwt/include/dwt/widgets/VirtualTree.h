@@ -62,7 +62,23 @@ public:
 		Seed(const BaseType::Seed& seed);
 	};
 
+	void create(const Seed& seed);
 	virtual bool handleMessage(const MSG& msg, LRESULT& retVal);
+	HTREEITEM insert(const tstring& text, HTREEITEM parent, HTREEITEM insertAfter = TVI_LAST,
+		LPARAM param = 0, bool expanded = false, int iconIndex = -1, int selectedIconIndex = -1);
+	HTREEITEM insert(TVINSERTSTRUCT& tvis);
+	bool isExpanded(HTREEITEM item) const;
+	void expand(HTREEITEM item);
+	void collapse(HTREEITEM item);
+	void setMultiSelect(bool value = true);
+	CheckState getCheckState(HTREEITEM item) const;
+	void setCheckState(HTREEITEM item, CheckState state);
+	HTREEITEM getSelected() const;
+	void setSelected(HTREEITEM item);
+	size_t countSelected() const;
+	bool getItemSelected(HTREEITEM item) const;
+	void setItemSelected(HTREEITEM item, bool selected = true);
+	std::vector<HTREEITEM> getSelectedItems() const;
 
 protected:
 	explicit VirtualTree(Widget* parent);
@@ -100,14 +116,18 @@ private:
 		void setText(LPTSTR text);
 
 		bool expanded() const;
+		bool selected() const;
 		Item* lastExpandedChild() const;
 		Item* prevVisible() const;
 		Item* nextVisible() const;
+		Item* nextItem() const;
 	};
 
 	std::unordered_set<Item, Item::Hash, Item::Equal> items;
 	Item* root;
 	Item* selected;
+	unsigned suppressSelectionSync;
+	bool virtualMultiSelect;
 
 	bool handleDelete(LPARAM lParam);
 	bool handleEnsureVisible(Item* item);
@@ -118,6 +138,7 @@ private:
 	UINT handleGetItemState(UINT mask, Item* item);
 	Item* handleGetNextItem(WPARAM code, Item* item);
 	Item* handleInsert(TVINSERTSTRUCT& tvis);
+	void handleItemChanged(const NMTVITEMCHANGE& data);
 	bool handleSelect(WPARAM code, Item* item);
 	void handleSelected(Item* item);
 	bool handleSetItem(TVITEMEX& tv);
@@ -129,6 +150,15 @@ private:
 	void display(Item& item);
 	void hide(Item& item);
 	void remove(Item* item);
+	bool multiSelect() const;
+	size_t selectedCount() const;
+	Item* firstSelected() const;
+	Item* nextSelected(Item* item) const;
+	void clearSelection(Item* except = nullptr);
+	void setSelectedState(Item* item, bool value, bool updateNative = true);
+	void updateNativeSelectedState(Item* item);
+	void beginSelectionSync();
+	void endSelectionSync();
 	void updateChildDisplay(Item* item);
 	void configureAccessibility();
 	LRESULT sendTreeMsg(UINT msg, WPARAM wParam, LPARAM lParam);

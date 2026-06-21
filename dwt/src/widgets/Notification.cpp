@@ -43,6 +43,10 @@ static const UINT taskbarMsg = ::RegisterWindowMessage(_T("TaskbarCreated"));
 NOTIFYICONDATA Notification::makeNID() const {
 	NOTIFYICONDATA nid = { static_cast<DWORD>(sizeof(NOTIFYICONDATA)), parent->handle() };
 	nid.uFlags |= NIF_SHOWTIP;
+	if(guid) {
+		nid.uFlags |= NIF_GUID;
+		nid.guidItem = *guid;
+	}
 	return nid;
 }
 
@@ -50,6 +54,7 @@ Notification::Notification(Widget* parent) :
 parent(parent),
 visible(false),
 ignoreNextClick(false),
+lastNotifyError(ERROR_SUCCESS),
 onlyBalloons(false),
 lastTick(0)
 {
@@ -80,11 +85,9 @@ void Notification::setVisible(bool visible_) {
 		return;
 	}
 
-	visible = visible_;
-
 	NOTIFYICONDATA nid = makeNID();
 
-	if(visible) {
+	if(visible_) {
 		nid.uFlags |= NIF_MESSAGE;
 		nid.uCallbackMessage = message;
 
@@ -98,12 +101,21 @@ void Notification::setVisible(bool visible_) {
 			nid.hIcon = icon->handle();
 		}
 
-		::Shell_NotifyIcon(NIM_ADD, &nid);
+		if(!notify(NIM_ADD, nid)) {
+			visible = false;
+			return;
+		}
 		nid.uVersion = NOTIFYICON_VERSION_4;
-		::Shell_NotifyIcon(NIM_SETVERSION, &nid);
+		if(!notify(NIM_SETVERSION, nid)) {
+			notify(NIM_DELETE, nid);
+			visible = false;
+			return;
+		}
+		visible = true;
 
 	} else {
-		::Shell_NotifyIcon(NIM_DELETE, &nid);
+		notify(NIM_DELETE, nid);
+		visible = false;
 	}
 }
 
@@ -115,38 +127,98 @@ void Notification::setTooltip(const tstring& tip_) {
 		NOTIFYICONDATA nid = makeNID();
 		nid.uFlags |= NIF_TIP;
 		tip.copy(nid.szTip, sizeof(nid.szTip) / sizeof(nid.szTip[0]) - 1);
-		::Shell_NotifyIcon(NIM_MODIFY, &nid);
+		notify(NIM_MODIFY, nid);
 	}
 }
 
 void Notification::addMessage(const tstring& title, const tstring& msg, const Callback& callback, const IconPtr& balloonIcon) {
+	MessageOptions options;
+	options.callback = callback;
+	options.balloonIcon = balloonIcon;
+	addMessage(title, msg, options);
+}
+
+void Notification::addMessage(const tstring& title, const tstring& msg,
+	const MessageOptions& options)
+{
 	if(!visible) {
 		setVisible(true);
+		if(!visible) {
+			return;
+		}
 		onlyBalloons = true;
 	}
 
-	balloons.emplace_back(callback, balloonIcon);
+	balloons.emplace_back(options.callback, options.balloonIcon);
 
 	NOTIFYICONDATA nid = makeNID();
 	nid.uFlags |= NIF_INFO;
+	if(options.realTime) {
+		nid.uFlags |= NIF_REALTIME;
+	}
 
 	msg.copy(nid.szInfo, sizeof(nid.szInfo) / sizeof(nid.szInfo[0]) - 1);
 
 	title.copy(nid.szInfoTitle, sizeof(nid.szInfoTitle) / sizeof(nid.szInfoTitle[0]) - 1);
 
-	if(balloonIcon) {
+	if(options.balloonIcon) {
 		nid.dwInfoFlags = NIIF_USER;
-		nid.hBalloonIcon = balloonIcon->handle();
+		nid.hBalloonIcon = options.balloonIcon->handle();
 	} else {
 		nid.dwInfoFlags = NIIF_INFO;
 	}
 
-	::Shell_NotifyIcon(NIM_MODIFY, &nid);
+	if(options.respectQuietTime) {
+		nid.dwInfoFlags |= NIIF_RESPECT_QUIET_TIME;
+	}
+	if(options.largeIcon) {
+		nid.dwInfoFlags |= NIIF_LARGE_ICON;
+	}
+	if(options.noSound) {
+		nid.dwInfoFlags |= NIIF_NOSOUND;
+	}
+
+	if(!notify(NIM_MODIFY, nid)) {
+		if(!balloons.empty()) {
+			balloons.pop_back();
+		}
+		if(onlyBalloons && balloons.empty()) {
+			setVisible(false);
+		}
+	}
+}
+
+void Notification::setGuid(const GUID& value) {
+	const bool wasVisible = visible;
+	if(wasVisible) {
+		auto nid = makeNID();
+		notify(NIM_DELETE, nid);
+		visible = false;
+	}
+	guid = value;
+	if(wasVisible) {
+		setVisible(true);
+	}
+}
+
+void Notification::clearGuid() {
+	const bool wasVisible = visible;
+	if(wasVisible) {
+		auto nid = makeNID();
+		notify(NIM_DELETE, nid);
+		visible = false;
+	}
+	guid.reset();
+	if(wasVisible) {
+		setVisible(true);
+	}
 }
 
 bool Notification::redisplay() {
 	if(visible) {
-		setVisible(false);
+		auto nid = makeNID();
+		notify(NIM_DELETE, nid);
+		visible = false;
 		setVisible(true);
 	}
 	return false;
@@ -217,6 +289,12 @@ bool Notification::trayHandler(const MSG& msg) {
 			break;
 		}
 
+	case NIN_BALLOONSHOW:
+		if(balloonShown) {
+			balloonShown();
+		}
+		break;
+
 	case NIN_POPUPOPEN:
 		if(popupOpened) {
 			popupOpened();
@@ -235,14 +313,29 @@ bool Notification::trayHandler(const MSG& msg) {
 
 void Notification::setFocus() {
 	auto nid = makeNID();
-	::Shell_NotifyIcon(NIM_SETFOCUS, &nid);
+	notify(NIM_SETFOCUS, nid);
 }
 
 Rectangle Notification::getRect() const {
 	NOTIFYICONIDENTIFIER identifier = { sizeof(NOTIFYICONIDENTIFIER), parent->handle(), 0 };
+	if(guid) {
+		identifier.guidItem = *guid;
+	}
 	RECT rect = { 0 };
 	return SUCCEEDED(::Shell_NotifyIconGetRect(&identifier, &rect)) ?
 		Rectangle(rect) : Rectangle();
+}
+
+bool Notification::notify(DWORD message_, NOTIFYICONDATA& nid) {
+	if(::Shell_NotifyIcon(message_, &nid)) {
+		lastNotifyError = ERROR_SUCCESS;
+		return true;
+	}
+	lastNotifyError = ::GetLastError();
+	if(lastNotifyError == ERROR_SUCCESS) {
+		lastNotifyError = ERROR_INVALID_FUNCTION;
+	}
+	return false;
 }
 
 }

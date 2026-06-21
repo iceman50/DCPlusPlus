@@ -37,6 +37,8 @@
 #include "Rectangle.h"
 #include "tstring.h"
 
+#include <vector>
+
 namespace dwt {
 
 struct DpiChangedEvent {
@@ -152,6 +154,78 @@ struct PointerEvent {
 	Type type;
 	ScreenCoordinate pos;
 	unsigned flags;
+	int wheelDelta;
+	bool infoAvailable;
+	bool touchInfoAvailable;
+	bool penInfoAvailable;
+	bool primary;
+	bool inContact;
+	bool canceled;
+	POINTER_INFO info;
+	POINTER_TOUCH_INFO touchInfo;
+	POINTER_PEN_INFO penInfo;
+	std::vector<POINTER_INFO> history;
+	std::vector<POINTER_TOUCH_INFO> touchHistory;
+	std::vector<POINTER_PEN_INFO> penHistory;
+};
+
+struct TouchPoint {
+	unsigned id;
+	ScreenCoordinate pos;
+	Rectangle contact;
+	DWORD flags;
+	DWORD mask;
+	DWORD time;
+	ULONG_PTR extraInfo;
+	bool down;
+	bool up;
+	bool move;
+	bool primary;
+	bool palm;
+	bool pen;
+	bool hasContact;
+	TOUCHINPUT raw;
+};
+
+struct TouchEvent {
+	explicit TouchEvent(const MSG& msg);
+
+	bool valid;
+	std::vector<TouchPoint> points;
+};
+
+struct GestureEvent {
+	enum Type {
+		Begin = GID_BEGIN,
+		End = GID_END,
+		Zoom = GID_ZOOM,
+		Pan = GID_PAN,
+		Rotate = GID_ROTATE,
+		TwoFingerTap = GID_TWOFINGERTAP,
+		PressAndTap = GID_PRESSANDTAP
+	};
+
+	explicit GestureEvent(const MSG& msg);
+
+	bool valid;
+	Type type;
+	ScreenCoordinate pos;
+	DWORD flags;
+	unsigned instanceId;
+	unsigned sequenceId;
+	ULONGLONG arguments;
+	std::vector<BYTE> extraArgs;
+	GESTUREINFO info;
+};
+
+struct GestureNotifyEvent {
+	explicit GestureNotifyEvent(const MSG& msg);
+
+	bool valid;
+	ScreenCoordinate pos;
+	DWORD flags;
+	unsigned instanceId;
+	GESTURENOTIFYSTRUCT info;
 };
 
 }

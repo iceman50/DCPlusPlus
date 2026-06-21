@@ -88,8 +88,17 @@ private:
 		Item();
 		void redrawGlyph(TableTree& w);
 	};
+	struct StoredRow {
+		std::vector<tstring> texts;
+		std::vector<bool> textCallbacks;
+		int image;
+		bool hasImage;
+		bool imageCallback;
+		StoredRow();
+	};
 	std::unordered_map<LPARAM, Item> items;
 	std::unordered_map<LPARAM, LPARAM> children; // child -> parent cache
+	std::unordered_map<LPARAM, StoredRow> storedRows;
 
 	Theme theme;
 	long indent;
@@ -99,6 +108,9 @@ private:
 	bool handleLeftMouseDown(const MouseEvent& me);
 	void handleDelete(int pos);
 	void handleInsert(LVITEM& lv);
+	void handleSetItem(LVITEM& lv, int itemIndex = -1);
+	void insertStoredRow(LPARAM data, int index, int itemIndent);
+	void remapData(LPARAM oldData, LPARAM newData);
 	int handleSort(LPARAM& lhs, LPARAM& rhs);
 
 	void eraseChild(decltype(children)::iterator& child, bool deleting);

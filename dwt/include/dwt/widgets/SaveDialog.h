@@ -66,6 +66,8 @@ public:
 	/// Constructor Taking pointer to parent
 	explicit SaveDialog( Widget * parent = 0 );
 
+	bool openShellItem(util::win32::FileDialogResult& result, unsigned flags = 0);
+
 private:
 	// aspects::FileFilter
 	bool openImpl(tstring& file, unsigned flags);

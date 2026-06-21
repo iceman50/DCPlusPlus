@@ -33,6 +33,8 @@
 #include <dwt/util/check.h>
 #include <dwt/Widget.h>
 #include <dwt/DWTException.h>
+#include <dwt/widgets/MDIFrame.h>
+#include <dwt/widgets/MDIParent.h>
 
 #include <algorithm>
 #include <array>
@@ -104,8 +106,10 @@ LRESULT CALLBACK WindowProc::wndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
 
 	if(w) {
 		if(uMsg == WM_NCDESTROY) {
+			Dispatcher& dispatcher = w->getDispatcher();
+			LRESULT ret = dispatcher.chain(msg);
 			w->kill();
-			return returnUnknown(msg);
+			return ret;
 		}
 
 		LRESULT res = 0;
@@ -185,28 +189,6 @@ HWND WindowProc::getHandler(const MSG& msg) {
 
 	return handler;
 }
-
-#ifdef PORT_ME /// @todo for MDI, make MDIChildProc derive from WindowProc and MDIFrameDispatcher from Dispatcher
-
-LRESULT MDIChildProc::returnUnknown(const MSG& msg) {
-	return ::DefMDIChildProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
-}
-
-Widget* MDIChildProc::getInitWidget(const MSG& msg) {
-	if(msg.message == WM_NCCREATE) {
-		return reinterpret_cast<Widget*>(reinterpret_cast<MDICREATESTRUCT*>(
-			reinterpret_cast<CREATESTRUCT*>(msg.lParam)->lpCreateParams)->lParam);
-	}
-}
-
-LRESULT MDIFrameDispatcher::chain(const MSG& msg) {
-	if(getMDIParent()) {
-		return ::DefFrameProc(hWnd, getMDIParent()->handle(), msg, wPar, lPar);
-	}
-	return NormalDispatcher::chain(msg);
-}
-
-#endif
 
 std::vector<tstring> Dispatcher::classNames;
 
@@ -296,6 +278,104 @@ Dispatcher& NormalDispatcher::getDefault() {
 
 LRESULT NormalDispatcher::chain(const MSG& msg) {
 	return ::DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+}
+
+namespace {
+
+class MDIChildWindowProc {
+public:
+	static LRESULT CALLBACK initProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+		MSG msg { hwnd, uMsg, wParam, lParam };
+
+		Widget* w = getInitWidget(msg);
+		if(w) {
+			w->setHandle(hwnd);
+			return WindowProc::wndProc(hwnd, uMsg, wParam, lParam);
+		}
+
+		return ::DefMDIChildProc(hwnd, uMsg, wParam, lParam);
+	}
+
+private:
+	static Widget* getInitWidget(const MSG& msg) {
+		if(msg.message != WM_NCCREATE) {
+			return 0;
+		}
+
+		CREATESTRUCT* create = reinterpret_cast<CREATESTRUCT*>(msg.lParam);
+		if(!create || !create->lpCreateParams) {
+			return 0;
+		}
+
+		MDICREATESTRUCT* mdiCreate = reinterpret_cast<MDICREATESTRUCT*>(create->lpCreateParams);
+		return reinterpret_cast<Widget*>(mdiCreate->lParam);
+	}
+};
+
+}
+
+MDIFrameDispatcher::MDIFrameDispatcher(LPCTSTR name) :
+Dispatcher(name)
+{ }
+
+Dispatcher& MDIFrameDispatcher::getDefault() {
+	static MDIFrameDispatcher dispatcher(className<MDIFrameDispatcher>());
+	return dispatcher;
+}
+
+LRESULT MDIFrameDispatcher::chain(const MSG& msg) {
+	if(msg.message == WM_NCDESTROY) {
+		return ::DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+	}
+
+	MDIFrame* frame = hwnd_cast<MDIFrame*>(msg.hwnd);
+	MDIParent* mdi = frame ? frame->getMDIParent() : 0;
+
+	if(mdi && mdi->handle()) {
+		return ::DefFrameProc(msg.hwnd, mdi->handle(), msg.message, msg.wParam, msg.lParam);
+	}
+
+	return ::DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+}
+
+MDIChildDispatcher::MDIChildDispatcher(WNDCLASSEX& cls) :
+Dispatcher(cls)
+{ }
+
+Dispatcher& MDIChildDispatcher::getDefault() {
+	static std::unique_ptr<Dispatcher> dispatcher;
+	if(!dispatcher) {
+		WNDCLASSEX cls = makeWndClass(className<MDIChildDispatcher>());
+		cls.lpfnWndProc = MDIChildWindowProc::initProc;
+		dispatcher.reset(new MDIChildDispatcher(cls));
+	}
+	return *dispatcher;
+}
+
+LRESULT MDIChildDispatcher::chain(const MSG& msg) {
+	return ::DefMDIChildProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+}
+
+MDIClientDispatcher::MDIClientDispatcher(LPCTSTR name) :
+Dispatcher(name),
+wndProc(0)
+{ }
+
+Dispatcher& MDIClientDispatcher::getDefault() {
+	static MDIClientDispatcher dispatcher(className<MDIClientDispatcher>());
+	return dispatcher;
+}
+
+LRESULT MDIClientDispatcher::chain(const MSG& msg) {
+	if(wndProc) {
+		return ::CallWindowProc(wndProc, msg.hwnd, msg.message, msg.wParam, msg.lParam);
+	}
+
+	return ::DefWindowProc(msg.hwnd, msg.message, msg.wParam, msg.lParam);
+}
+
+void MDIClientDispatcher::setWindowProc(WNDPROC wndProc_) {
+	wndProc = wndProc_;
 }
 
 ChainingDispatcher::ChainingDispatcher(WNDCLASSEX& cls, WNDPROC wndProc_) :

@@ -33,6 +33,7 @@
 
 #include <dwt/CanvasClasses.h>
 #include <dwt/resources/ImageList.h>
+#include <dwt/util/check.h>
 
 namespace dwt {
 
@@ -46,7 +47,10 @@ padding(3, 2)
 }
 
 Button::Button(Widget* parent) :
-	BaseType(parent, ChainingDispatcher::superClass<ThisType>())
+	BaseType(parent, ChainingDispatcher::superClass<ThisType>()),
+	imageAlignment(BUTTON_IMAGELIST_ALIGN_LEFT),
+	dropDownState(false),
+	nativeDropDownState(false)
 {
 }
 
@@ -55,23 +59,18 @@ void Button::create(const Seed& cs) {
 	setFont(cs.font);
 
 	auto padding = scale(cs.padding);
-	::RECT rect = { padding.x, padding.y, padding.x, padding.y };
-	sendMessage(BCM_SETTEXTMARGIN, 0, reinterpret_cast<LPARAM>(&rect));
+	setTextMargin(Rectangle(padding.x, padding.y, 0, 0));
 
 	onDpiResourcesChanged([this](const DpiResourceEvent& event) {
-		if(!imageList) {
-			return;
+		if(imageList) {
+			auto resized = imageList->resized(
+				event.scale(imageList->getImageSize()));
+			setImageList(resized, imageAlignment,
+				Rectangle(event.scale(imageMargin.pos),
+					event.scale(imageMargin.size)));
 		}
-		BUTTON_IMAGELIST current = { };
-		if(!sendMessage(BCM_GETIMAGELIST, 0,
-			reinterpret_cast<LPARAM>(&current))) {
-			return;
-		}
-		auto resized = imageList->resized(
-			event.scale(imageList->getImageSize()));
-		Rectangle margin(current.margin);
-		setImageList(resized, current.uAlign,
-			Rectangle(event.scale(margin.pos), event.scale(margin.size)));
+		setTextMargin(Rectangle(event.scale(textMargin.pos),
+			event.scale(textMargin.size)));
 	});
 }
 
@@ -104,25 +103,104 @@ void Button::setImageList(const ImageListPtr& images, UINT alignment,
 	const Rectangle& margin)
 {
 	imageList = images;
+	imageAlignment = alignment;
+	imageMargin = margin;
 	BUTTON_IMAGELIST value = { imageList ? imageList->handle() : nullptr,
 		margin.toRECT(), alignment };
 	sendMessage(BCM_SETIMAGELIST, 0, reinterpret_cast<LPARAM>(&value));
+}
+
+bool Button::getImageListInfo(BUTTON_IMAGELIST& info) const {
+	info = { };
+	if(sendMessage(BCM_GETIMAGELIST, 0,
+		reinterpret_cast<LPARAM>(&info))) {
+		return true;
+	}
+	if(!imageList) {
+		return false;
+	}
+	info.himl = imageList->handle();
+	info.margin = imageMargin.toRECT();
+	info.uAlign = imageAlignment;
+	return true;
+}
+
+void Button::setTextMargin(const Rectangle& margin) {
+	textMargin = margin;
+	auto value = margin.toRECT();
+	sendMessage(BCM_SETTEXTMARGIN, 0, reinterpret_cast<LPARAM>(&value));
+}
+
+Rectangle Button::getTextMargin() const {
+	RECT value = { };
+	if(!sendMessage(BCM_GETTEXTMARGIN, 0, reinterpret_cast<LPARAM>(&value))) {
+		return textMargin;
+	}
+	return Rectangle(value);
 }
 
 void Button::setSplitInfo(const BUTTON_SPLITINFO& info) {
 	sendMessage(BCM_SETSPLITINFO, 0, reinterpret_cast<LPARAM>(&info));
 }
 
+void Button::setDropDownState(bool dropped) {
+	dropDownState = dropped;
+	nativeDropDownState = sendMessage(BCM_SETDROPDOWNSTATE,
+		dropped ? TRUE : FALSE) != FALSE;
+}
+
+bool Button::getDropDownState() const {
+	return nativeDropDownState ?
+		(sendMessage(BM_GETSTATE) & BST_DROPDOWNPUSHED) != 0 : dropDownState;
+}
+
 void Button::onDropDown(std::function<void (const RECT&)> f) {
 	addCallback(Message(WM_NOTIFY, BCN_DROPDOWN), [f](const MSG& msg, LRESULT&) -> bool {
-		f(reinterpret_cast<NMBCDROPDOWN*>(msg.lParam)->rcButton);
+		auto data = reinterpret_cast<NMBCDROPDOWN*>(msg.lParam);
+		if(!data) {
+			return false;
+		}
+		f(data->rcButton);
 		return true;
 	});
 }
 
+void Button::onHotChanged(std::function<void (bool, DWORD)> f) {
+	addCallback(Message(WM_NOTIFY, BCN_HOTITEMCHANGE),
+		[this, f](const MSG& msg, LRESULT&) -> bool {
+			auto data = reinterpret_cast<NMBCHOTITEM*>(msg.lParam);
+			if(!data) {
+				return false;
+			}
+			const bool hot = (data->dwFlags & HICF_ENTERING) != 0 ? true :
+				(data->dwFlags & HICF_LEAVING) != 0 ? false : isHot();
+			f(hot, data->dwFlags);
+			return true;
+		});
+}
+
+void Button::onFocusChanged(std::function<void (bool)> f) {
+	addCallback(Message(WM_COMMAND, BN_SETFOCUS),
+		[f](const MSG&, LRESULT&) -> bool {
+			f(true);
+			return false;
+		});
+	addCallback(Message(WM_COMMAND, BN_KILLFOCUS),
+		[f](const MSG&, LRESULT&) -> bool {
+			f(false);
+			return false;
+		});
+}
+
+bool Button::isHot() const {
+	return (sendMessage(BM_GETSTATE) & BST_HOT) != 0;
+}
+
 Point Button::getPreferredSize() {
 	SIZE size = { 0 };
-	sendMessage(BCM_GETIDEALSIZE, 0, reinterpret_cast<LPARAM>(&size));
+	if(!sendMessage(BCM_GETIDEALSIZE, 0, reinterpret_cast<LPARAM>(&size))) {
+		dwtassert(false, "Button: BCM_GETIDEALSIZE failed");
+	}
 	return Point(size.cx, size.cy);
 }
 

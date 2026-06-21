@@ -113,7 +113,7 @@ inline MDIChild::~MDIChild()
 }
 
 inline MDIChild::MDIChild( Widget * parent )
-	: BaseType(parent, NormalDispatcher::getDefault())
+	: BaseType(parent, MDIChildDispatcher::getDefault())
 {}
 
 }

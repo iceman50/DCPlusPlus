@@ -36,8 +36,12 @@
 #ifndef DWT_Slider_h
 #define DWT_Slider_h
 
+#include "../aspects/CustomDraw.h"
 #include "../aspects/Scrollable.h"
 #include "Control.h"
+
+#include <algorithm>
+#include <vector>
 
 namespace dwt {
 
@@ -55,6 +59,7 @@ namespace dwt {
 class Slider :
 	public CommonControl,
 	// aspects::s
+	public aspects::CustomDraw<Slider, NMCUSTOMDRAW>,
 	public aspects::Scrollable< Slider >
 {
 	typedef CommonControl BaseType;
@@ -122,9 +127,11 @@ public:
 
 	/// Sets the range of the slider
 	/** The range is the unique values of the control, use this function to set the
-	  * range of the control. Maximum values are 65000 and minimum are -65000
+	  * range of the control.
 	  */
-	void setRange( short minimum, short maximum );
+	void setRange( int minimum, int maximum, bool redraw = true );
+	void setMinValue(int minimum, bool redraw = true);
+	void setMaxValue(int maximum, bool redraw = true);
 
 	/// Retrieves the maximum position of the Slider
 	/** The return value from this function is the maximum value of the Slider
@@ -141,12 +148,31 @@ public:
 	  * control will set the thumb to that position.
 	  */
 	void setPosition( int newPosition );
+	void setSelection(int start, int end, bool redraw = true);
+	void clearSelection(bool redraw = true);
+	int getSelectionStart() const;
+	int getSelectionEnd() const;
+	int setLineSize(int size);
+	int getLineSize() const;
+	int setPageSize(int size);
+	int getPageSize() const;
+	void setThumbLength(int length);
+	int getThumbLength() const;
+	Rectangle getChannelRect() const;
+	Rectangle getThumbRect() const;
 
 	/// Sets tick frequency
 	/** Sets the frequency of the ticks, e.g. if five is given every fifth value of
 	  * the slider will have a tick, default value is one.
 	  */
 	void setTickFrequency( unsigned frequency );
+	bool setTick(int position);
+	void clearTicks(bool redraw = true);
+	int getTickCount() const;
+	int getTick(int index) const;
+	std::vector<int> getTicks() const;
+	int getTickPosition(int index) const;
+	std::vector<int> getTickPositions() const;
 
 	/// Returns the "value" of the Slider
 	/** Returns the "value" of the Slider or the position of the thumb. If you for
@@ -154,6 +180,23 @@ public:
 	  * thumb is in the 3/4 of the max position this function will return 5.
 	  */
 	int getPosition();
+	HWND getToolTip() const;
+	void setToolTip(HWND toolTip);
+	int setToolTipPosition(int position);
+	HWND getBuddy(bool beginning) const;
+	bool getUnicodeFormat() const;
+	bool setUnicodeFormat(bool unicode);
+	void setReversed(bool value = true);
+	void setDownIsLeft(bool value = true);
+	void setTransparentBackground(bool value = true);
+	void setNotifyBeforeMove(bool value = true);
+	void setSelectionRangeVisible(bool value = true);
+	void setFixedThumbLength(bool value = true);
+
+	/** Called before the thumb position changes when TBS_NOTIFYBEFOREMOVE is enabled.
+	 * Return true to allow the move or false to veto it.
+	 */
+	void onThumbPositionChanging(std::function<bool (const NMTRBTHUMBPOSCHANGING&)> f);
 
 	/// Assigns a buddy control
 	/** A "buddy control" may be of any type but most often a TextBox or a
@@ -228,9 +271,23 @@ inline void Slider::setShowTicks( bool value )
 	this->addRemoveStyle( TBS_NOTICKS, !value );
 }
 
-inline void Slider::setRange( short minimum, short maximum )
+inline void Slider::setRange( int minimum, int maximum, bool redraw )
 {
-	this->sendMessage( TBM_SETRANGE, static_cast< WPARAM >( TRUE ), MAKELONG( minimum, maximum ) );
+	if(minimum > maximum) {
+		std::swap(minimum, maximum);
+	}
+	setMinValue(minimum, false);
+	setMaxValue(maximum, redraw);
+}
+
+inline void Slider::setMinValue(int minimum, bool redraw) {
+	this->sendMessage(TBM_SETRANGEMIN, redraw ? TRUE : FALSE,
+		static_cast<LPARAM>(minimum));
+}
+
+inline void Slider::setMaxValue(int maximum, bool redraw) {
+	this->sendMessage(TBM_SETRANGEMAX, redraw ? TRUE : FALSE,
+		static_cast<LPARAM>(maximum));
 }
 
 inline int Slider::getMaxValue()
@@ -248,9 +305,117 @@ inline void Slider::setPosition( int newPosition )
 	this->sendMessage( TBM_SETPOS, static_cast< WPARAM >( TRUE ), static_cast< LPARAM >( newPosition ) );
 }
 
+inline void Slider::setSelection(int start, int end, bool redraw) {
+	if(start > end) {
+		std::swap(start, end);
+	}
+	this->sendMessage(TBM_SETSELSTART, FALSE, start);
+	this->sendMessage(TBM_SETSELEND, redraw ? TRUE : FALSE, end);
+}
+
+inline void Slider::clearSelection(bool redraw) {
+	this->sendMessage(TBM_CLEARSEL, redraw ? TRUE : FALSE);
+}
+
+inline int Slider::getSelectionStart() const {
+	return static_cast<int>(this->sendMessage(TBM_GETSELSTART));
+}
+
+inline int Slider::getSelectionEnd() const {
+	return static_cast<int>(this->sendMessage(TBM_GETSELEND));
+}
+
+inline int Slider::setLineSize(int size) {
+	return static_cast<int>(this->sendMessage(TBM_SETLINESIZE, 0, size));
+}
+
+inline int Slider::getLineSize() const {
+	return static_cast<int>(this->sendMessage(TBM_GETLINESIZE));
+}
+
+inline int Slider::setPageSize(int size) {
+	return static_cast<int>(this->sendMessage(TBM_SETPAGESIZE, 0, size));
+}
+
+inline int Slider::getPageSize() const {
+	return static_cast<int>(this->sendMessage(TBM_GETPAGESIZE));
+}
+
+inline void Slider::setThumbLength(int length) {
+	this->sendMessage(TBM_SETTHUMBLENGTH, length);
+}
+
+inline int Slider::getThumbLength() const {
+	return static_cast<int>(this->sendMessage(TBM_GETTHUMBLENGTH));
+}
+
+inline Rectangle Slider::getChannelRect() const {
+	RECT rect = { 0 };
+	this->sendMessage(TBM_GETCHANNELRECT, 0, reinterpret_cast<LPARAM>(&rect));
+	return Rectangle(rect);
+}
+
+inline Rectangle Slider::getThumbRect() const {
+	RECT rect = { 0 };
+	this->sendMessage(TBM_GETTHUMBRECT, 0, reinterpret_cast<LPARAM>(&rect));
+	return Rectangle(rect);
+}
+
 inline void Slider::setTickFrequency( unsigned frequency )
 {
 	this->sendMessage( TBM_SETTICFREQ, static_cast< WPARAM >( frequency ));
+}
+
+inline bool Slider::setTick(int position) {
+	return this->sendMessage(TBM_SETTIC, 0, position) == TRUE;
+}
+
+inline void Slider::clearTicks(bool redraw) {
+	this->sendMessage(TBM_CLEARTICS, redraw ? TRUE : FALSE);
+}
+
+inline int Slider::getTickCount() const {
+	return static_cast<int>(this->sendMessage(TBM_GETNUMTICS));
+}
+
+inline int Slider::getTick(int index) const {
+	return static_cast<int>(this->sendMessage(TBM_GETTIC, index));
+}
+
+inline std::vector<int> Slider::getTicks() const {
+	std::vector<int> ticks;
+	auto count = getTickCount();
+	if(count <= 0) {
+		return ticks;
+	}
+	ticks.reserve(static_cast<size_t>(count));
+	for(int i = 0; i < count; ++i) {
+		auto tick = getTick(i);
+		if(tick >= 0) {
+			ticks.push_back(tick);
+		}
+	}
+	return ticks;
+}
+
+inline int Slider::getTickPosition(int index) const {
+	return static_cast<int>(this->sendMessage(TBM_GETTICPOS, index));
+}
+
+inline std::vector<int> Slider::getTickPositions() const {
+	std::vector<int> positions;
+	auto count = getTickCount();
+	if(count <= 0) {
+		return positions;
+	}
+	positions.reserve(static_cast<size_t>(count));
+	for(int i = 0; i < count; ++i) {
+		auto position = getTickPosition(i);
+		if(position >= 0) {
+			positions.push_back(position);
+		}
+	}
+	return positions;
 }
 
 inline int Slider::getPosition()
@@ -258,11 +423,73 @@ inline int Slider::getPosition()
 	return static_cast<int>(this->sendMessage( TBM_GETPOS ));
 }
 
+inline HWND Slider::getToolTip() const {
+	return reinterpret_cast<HWND>(this->sendMessage(TBM_GETTOOLTIPS));
+}
+
+inline void Slider::setToolTip(HWND toolTip) {
+	this->sendMessage(TBM_SETTOOLTIPS, reinterpret_cast<WPARAM>(toolTip));
+}
+
+inline int Slider::setToolTipPosition(int position) {
+	return static_cast<int>(this->sendMessage(TBM_SETTIPSIDE, position));
+}
+
+inline HWND Slider::getBuddy(bool beginning) const {
+	return reinterpret_cast<HWND>(this->sendMessage(TBM_GETBUDDY,
+		beginning ? TRUE : FALSE));
+}
+
+inline bool Slider::getUnicodeFormat() const {
+	return this->sendMessage(TBM_GETUNICODEFORMAT) != 0;
+}
+
+inline bool Slider::setUnicodeFormat(bool unicode) {
+	return this->sendMessage(TBM_SETUNICODEFORMAT, unicode ? TRUE : FALSE) != 0;
+}
+
+inline void Slider::setReversed(bool value) {
+	this->addRemoveStyle(TBS_REVERSED, value);
+}
+
+inline void Slider::setDownIsLeft(bool value) {
+	this->addRemoveStyle(TBS_DOWNISLEFT, value);
+}
+
+inline void Slider::setTransparentBackground(bool value) {
+	this->addRemoveStyle(TBS_TRANSPARENTBKGND, value);
+}
+
+inline void Slider::setNotifyBeforeMove(bool value) {
+	this->addRemoveStyle(TBS_NOTIFYBEFOREMOVE, value);
+}
+
+inline void Slider::setSelectionRangeVisible(bool value) {
+	this->addRemoveStyle(TBS_ENABLESELRANGE, value);
+}
+
+inline void Slider::setFixedThumbLength(bool value) {
+	this->addRemoveStyle(TBS_FIXEDLENGTH, value);
+}
+
+inline void Slider::onThumbPositionChanging(
+	std::function<bool (const NMTRBTHUMBPOSCHANGING&)> f)
+{
+	addCallback(Message(WM_NOTIFY, TRBN_THUMBPOSCHANGING),
+		[f](const MSG& msg, LRESULT& result) -> bool {
+			auto data = reinterpret_cast<NMTRBTHUMBPOSCHANGING*>(msg.lParam);
+			if(!data) {
+				return false;
+			}
+			result = f(*data) ? FALSE : TRUE;
+			return true;
+		});
+}
+
 inline void Slider::assignBuddy( bool beginning, Widget * buddy )
 {
-	assert( buddy && buddy->handle() );
 	this->sendMessage( TBM_SETBUDDY, static_cast< WPARAM >( beginning ? TRUE : FALSE ),
-		reinterpret_cast< LPARAM >( buddy->handle() ) );
+		reinterpret_cast< LPARAM >( buddy ? buddy->handle() : nullptr ) );
 }
 
 inline Slider::Slider( dwt::Widget * parent )

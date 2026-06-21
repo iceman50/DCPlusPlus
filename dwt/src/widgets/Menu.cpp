@@ -74,6 +74,7 @@ void Menu::Colors::reset() {
 Menu::Seed::Seed(bool ownerDrawn_, const Point& iconSize_, FontPtr font_) :
 popup(true),
 ownerDrawn(ownerDrawn_),
+commandMessages(false),
 iconSize(iconSize_),
 font(font_)
 {
@@ -84,6 +85,7 @@ parentMenu(0),
 parent(parent),
 ownerDrawn(true),
 popup(true),
+commandMessages(false),
 drawSidebar(false)
 {
 	dwtassert(dynamic_cast<Control*>(parent), "A Menu must have a parent derived from dwt::Control");
@@ -92,6 +94,7 @@ drawSidebar(false)
 void Menu::create(const Seed& seed) {
 	ownerDrawn = seed.ownerDrawn;
 	popup = seed.popup;
+	commandMessages = seed.commandMessages;
 
 	itsHandle = popup ? ::CreatePopupMenu() : ::CreateMenu();
 	if(!itsHandle) {
@@ -113,7 +116,7 @@ void Menu::create(const Seed& seed) {
 		}
 	}
 
-	if(!popup) {
+	if(!popup && !commandMessages) {
 		// set the MNS_NOTIFYBYPOS style to the whole menu
 		MENUINFO mi = { sizeof(MENUINFO), MIM_STYLE, MNS_NOTIFYBYPOS };
 		if(!::SetMenuInfo(handle(), &mi))
@@ -175,7 +178,9 @@ void Menu::setMenu() {
 Menu* Menu::appendPopup(const tstring& text, const IconPtr& icon, bool subTitle) {
 	// create the sub-menu
 	auto sub = new Menu(getParent());
-	sub->create(Seed(ownerDrawn, iconSize, font));
+	Seed seed(ownerDrawn, iconSize, font);
+	seed.commandMessages = commandMessages;
+	sub->create(seed);
 	sub->parentMenu = this;
 
 	if(subTitle && popup) {
@@ -735,6 +740,7 @@ void Menu::appendSeparator() {
 
 void Menu::remove(unsigned index) {
 	auto child = ::GetSubMenu(itsHandle, index);
+	auto commandId = ::GetMenuItemID(itsHandle, index);
 
 	if(!::RemoveMenu(itsHandle, index, MF_BYPOSITION)) {
 		throw Win32Exception("Couldn't remove item in Menu::remove");
@@ -760,7 +766,11 @@ void Menu::remove(unsigned index) {
 
 	} else if(!getRootMenu()->popup) {
 		// in the menu bar: remove the callback.
-		getParent()->clearCallbacks(Message(WM_MENUCOMMAND, index * 31 + reinterpret_cast<LPARAM>(handle())));
+		if(getRootMenu()->commandMessages) {
+			getParent()->clearCallbacks(Message(WM_COMMAND, commandId));
+		} else {
+			getParent()->clearCallbacks(Message(WM_MENUCOMMAND, index * 31 + reinterpret_cast<LPARAM>(handle())));
+		}
 	}
 }
 
@@ -802,6 +812,14 @@ unsigned Menu::appendItem(const tstring& text, const Dispatcher::F& f, const Ico
 				commands_ref.reset(new commands_type::element_type);
 			info.wID = static_cast<UINT>(id_offset + commands_ref->size());
 			commands_ref->push_back(async_f);
+		} else if(getRootMenu()->commandMessages) {
+			commands_type& commands_ref = getRootMenu()->commands;
+			if(!commands_ref.get()) {
+				commands_ref.reset(new commands_type::element_type);
+			}
+			info.wID = static_cast<UINT>(command_id_offset + commands_ref->size());
+			commands_ref->push_back(async_f);
+			getParent()->addCallback(Message(WM_COMMAND, info.wID), Dispatcher(async_f));
 		} else {
 			// sub-menus of a menu bar operate via WM_MENUCOMMAND
 			getParent()->addCallback(Message(WM_MENUCOMMAND, index * 31 + reinterpret_cast<LPARAM>(handle())),

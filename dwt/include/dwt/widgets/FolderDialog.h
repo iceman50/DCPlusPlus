@@ -38,6 +38,9 @@
 
 #include "../Widget.h"
 #include "../tstring.h"
+#include "../util/win32/FileDialog.h"
+
+#include <vector>
 
 namespace dwt {
 
@@ -79,14 +82,21 @@ public:
 	FolderDialog& setInitialSelection(const int csidl);
 
 	FolderDialog& setClientGuid(const GUID& guid);
+	FolderDialog& setForceFilesystem(bool force = true);
+	FolderDialog& setInitialFolder(IShellItem* item);
 	FolderDialog& addPlace(const tstring& path, bool top = false);
+	FolderDialog& addPlace(IShellItem* item, bool top = false);
 	FolderDialog& addOptions(FILEOPENDIALOGOPTIONS options);
+	FolderDialog& setFileDialogEvents(const util::win32::FileDialogEvents& events);
+	FolderDialog& onFileDialogCustomize(const util::win32::FileDialogCustomizeCallback& callback);
+	FolderDialog& onFileDialogControls(const util::win32::FileDialogControlsCallback& callback);
 
 	/** Display the dialog.
 	@param dir On input, may define an initially selected dir (shortcut for setInitialSelection).
 	On output, contains the selected directory on success.
 	@return Whether a directory was selected and successfully resolved. */
 	bool open(tstring& dir);
+	bool openShellItem(util::win32::FileDialogResult& result);
 
 	~FolderDialog();
 
@@ -97,11 +107,18 @@ private:
 	tstring initialSel;
 	LPITEMIDLIST pidlInitialSel;
 	std::vector<std::pair<tstring, FDAP>> places;
+	std::vector<std::pair<util::win32::ShellItemPtr, FDAP>> shellPlaces;
 	FILEOPENDIALOGOPTIONS options;
+	bool forceFilesystem;
+	util::win32::ShellItemPtr initialFolder;
 	GUID clientGuid;
 	bool hasClientGuid;
+	util::win32::FileDialogEvents events;
+	util::win32::FileDialogCustomizeCallback customize;
+	util::win32::FileDialogControlsCallback controls;
 
 	HWND getParentHandle() const { return parent ? parent->handle() : nullptr; }
+	util::win32::FileDialogOptions getModernOptions() const;
 	bool openRooted(tstring& dir);
 	static int CALLBACK browseCallbackProc(HWND hwnd, UINT message, LPARAM, LPARAM data);
 };

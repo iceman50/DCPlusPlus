@@ -37,7 +37,9 @@ namespace dwt {
 
 // TODO Fix caption
 MDIFrame::Seed::Seed(const tstring& caption) :
-	BaseType::Seed(caption, 0, 0)
+	BaseType::Seed(caption, WS_OVERLAPPEDWINDOW, 0),
+	mdiIdFirstChild(0),
+	mdiWindowMenu(NULL)
 {
 }
 
@@ -45,13 +47,25 @@ void MDIFrame::create( const Seed& cs )
 {
 	BaseType::create(cs);
 
-	mdi = WidgetCreator<MDIParent>::create(this);
+	MDIParent::Seed mdiSeed;
+	mdiSeed.idFirstChild = cs.mdiIdFirstChild;
+	mdiSeed.windowMenu = cs.mdiWindowMenu;
+	mdi = WidgetCreator<MDIParent>::create(this, mdiSeed);
+	onSized([this](const SizedEvent&) { layout(); });
+	layout();
+}
+
+void MDIFrame::layout()
+{
+	if(mdi && mdi->handle()) {
+		mdi->resize(Rectangle(getClientSize()));
+	}
 }
 
 bool MDIFrame::handleMessage(const MSG& msg, LRESULT& retVal) {
 	bool handled = BaseType::handleMessage(msg, retVal);
 
-	if(!handled && msg.message == WM_COMMAND && getMDIParent()->getActive()) {
+	if(!handled && msg.message == WM_COMMAND && getMDIParent() && getMDIParent()->getActive()) {
 		// Forward commands to the active tab
 		handled = getMDIParent()->getActive()->handleMessage(msg, retVal);
 	}

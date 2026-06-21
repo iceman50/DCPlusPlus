@@ -31,6 +31,8 @@
 
 #include <dwt/widgets/LoadDialog.h>
 
+#include <utility>
+
 namespace dwt {
 
 bool LoadDialog::openImpl(tstring& file, unsigned flags) {
@@ -51,6 +53,29 @@ bool LoadDialog::openMultiple(std::vector<tstring>& files, unsigned flags)
 	options.legacyFlags = flags | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
 		OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT;
 	return util::win32::showFileDialog(options, files);
+}
+
+bool LoadDialog::openShellItem(util::win32::FileDialogResult& result, unsigned flags) {
+	auto options = getOptions(false);
+	options.forceFilesystem = false;
+	options.legacyFlags = flags | OFN_HIDEREADONLY;
+	if(!result.path.empty()) {
+		options.initialFileName = result.path;
+	}
+
+	std::vector<util::win32::FileDialogResult> results;
+	if(!util::win32::showFileDialogItems(options, results)) {
+		return false;
+	}
+	result = std::move(results.front());
+	return true;
+}
+
+bool LoadDialog::openShellItems(std::vector<util::win32::FileDialogResult>& results, unsigned flags) {
+	auto options = getOptions(false, true);
+	options.forceFilesystem = false;
+	options.legacyFlags = flags | OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT;
+	return util::win32::showFileDialogItems(options, results);
 }
 
 }

@@ -36,6 +36,7 @@
 #ifndef DWT_ProgressBar_h
 #define DWT_ProgressBar_h
 
+#include "../aspects/CustomDraw.h"
 #include "Control.h"
 
 namespace dwt {
@@ -49,7 +50,8 @@ namespace dwt {
   * jobs, often used when downloading from internet or installing applications etc.
   */
 class ProgressBar :
-	public CommonControl
+	public CommonControl,
+	public aspects::CustomDraw<ProgressBar, NMCUSTOMDRAW>
 {
 	typedef CommonControl BaseType;
 

@@ -45,6 +45,7 @@ namespace dwt {
 // Forward declaring friends
 template< class WidgetType >
 class WidgetCreator;
+class Menu;
 
 /** sideeffect= \par Side Effects :
   */
@@ -112,6 +113,32 @@ public:
 		this->sendMessage(WM_MDIICONARRANGE);
 	}
 
+	void closeActive() {
+		if(auto active = getActive()) {
+			this->sendMessage(WM_MDIDESTROY, reinterpret_cast<WPARAM>(active->handle()));
+		}
+	}
+
+	void closeAll() {
+		for(HWND child = ::GetWindow(handle(), GW_CHILD); child; ) {
+			HWND nextChild = ::GetWindow(child, GW_HWNDNEXT);
+			if(hwnd_cast<Widget*>(child)) {
+				this->sendMessage(WM_MDIDESTROY, reinterpret_cast<WPARAM>(child));
+			}
+			child = nextChild;
+		}
+	}
+
+	void minimizeAll() {
+		for(HWND child = ::GetWindow(handle(), GW_CHILD); child; ) {
+			HWND nextChild = ::GetWindow(child, GW_HWNDNEXT);
+			if(hwnd_cast<Widget*>(child)) {
+				::ShowWindow(child, SW_MINIMIZE);
+			}
+			child = nextChild;
+		}
+	}
+
 	Widget* getActive() {
 		return hwnd_cast<Widget*>(reinterpret_cast<HWND>(this->sendMessage(WM_MDIGETACTIVE)));
 	}
@@ -123,13 +150,40 @@ public:
 	}
 
 	void setActive(dwt::Widget* widget) {
-		// TODO check that this is an instance of mdichild
-		this->sendMessage(WM_MDIACTIVATE, reinterpret_cast<WPARAM>(widget->handle()));
+		if(widget && ::GetParent(widget->handle()) == handle()) {
+			this->sendMessage(WM_MDIACTIVATE, reinterpret_cast<WPARAM>(widget->handle()));
+		}
+	}
+
+	void maximizeActive() {
+		if(auto active = getActive()) {
+			this->sendMessage(WM_MDIMAXIMIZE, reinterpret_cast<WPARAM>(active->handle()));
+		}
+	}
+
+	void restoreActive() {
+		if(auto active = getActive()) {
+			this->sendMessage(WM_MDIRESTORE, reinterpret_cast<WPARAM>(active->handle()));
+		}
 	}
 
 	void next() {
-		getParent()->sendMessage(WM_SYSCOMMAND, SC_NEXTWINDOW, MAKELPARAM(0, -1));
+		this->sendMessage(WM_MDINEXT, reinterpret_cast<WPARAM>(
+			getActive() ? getActive()->handle() : NULL), FALSE);
 	}
+
+	void previous() {
+		this->sendMessage(WM_MDINEXT, reinterpret_cast<WPARAM>(
+			getActive() ? getActive()->handle() : NULL), TRUE);
+	}
+
+	void setMenu(HMENU frameMenu, HMENU windowMenu);
+	void setMenu(Menu* frameMenu, Menu* windowMenu);
+	void setBackgroundColor(COLORREF color);
+	COLORREF getBackgroundColor() const { return backgroundColor; }
+	void setBackgroundImage(const BitmapPtr& bitmap);
+	void setBackgroundImage(const IconPtr& icon);
+	void clearBackgroundImage();
 
 	MDIFrame* getParent() { return static_cast<MDIFrame*>(BaseType::getParent()); }
 protected:
@@ -137,8 +191,17 @@ protected:
 	explicit MDIParent( Widget * parent );
 
 	// Protected to avoid direct instantiation, you can inherit and use WidgetFactory class which is friend
-	virtual ~MDIParent()
-	{}
+	virtual ~MDIParent();
+private:
+	bool handlePaintBackground();
+	bool handleEraseBackground(HDC hdc);
+	void redrawBackground();
+
+	Application::FilterIter acceleratorFilter;
+	bool hasAcceleratorFilter;
+	COLORREF backgroundColor;
+	BitmapPtr backgroundImage;
+	IconPtr backgroundIcon;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -146,7 +209,12 @@ protected:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 inline MDIParent::MDIParent( Widget * parent )
-	: BaseType(parent, NormalDispatcher::getDefault())
+	: BaseType(parent, MDIClientDispatcher::getDefault()),
+	acceleratorFilter(),
+	hasAcceleratorFilter(false),
+	backgroundColor(::GetSysColor(COLOR_APPWORKSPACE)),
+	backgroundImage(),
+	backgroundIcon()
 {
 	dwtassert(parent, "Can't have a MDIParent without a parent...");
 }

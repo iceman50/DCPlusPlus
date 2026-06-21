@@ -240,6 +240,8 @@ public:
 	DWORD getExtendedStyle() const;
 	void setMultiSelect(bool value = true);
 	void setDoubleBuffered(bool value = true);
+	bool getItemSelected(HTREEITEM item) const;
+	void setItemSelected(HTREEITEM item, bool selected = true);
 	std::vector<HTREEITEM> getSelectedItems() const;
 	void onItemChanged(std::function<void (const NMTVITEMCHANGE&)> f);
 	void onItemChanging(std::function<bool (const NMTVITEMCHANGE&)> f);
@@ -250,6 +252,7 @@ public:
 	void onBeginRightDrag(std::function<void (const NMTREEVIEW&)> f);
 	void onAsyncDraw(std::function<void (NMTVASYNCDRAW&)> f);
 	void onTreeKeyDown(std::function<void (const NMTVKEYDOWN&)> f);
+	void onCustomDraw(std::function<LRESULT (NMTVCUSTOMDRAW&)> f);
 
 	ImageListPtr createDragImage(HTREEITEM item) const;
 	void setInsertMark(HTREEITEM item, bool after = false);
@@ -291,8 +294,12 @@ public:
 
 	/// @todo should not be public
 	HWND treeHandle() const { return tree->handle(); }
+	/// Returns the embedded column header, creating it when necessary.
+	HeaderPtr getHeader();
 
 protected:
+	void setFontImpl();
+
 	// Constructor Taking pointer to parent
 	explicit Tree( Widget * parent );
 
@@ -306,12 +313,11 @@ protected:
 private:
 	ImageListPtr itsNormalImageList;
 	ImageListPtr itsStateImageList;
+	std::function<LRESULT (NMTVCUSTOMDRAW&)> customDraw;
 
 	HeaderPtr header;
 
 	std::map<HTREEITEM, std::vector<tstring>> texts;
-
-	HeaderPtr getHeader();
 
 	// aspects::Data
 	LPARAM getDataImpl(HTREEITEM item);

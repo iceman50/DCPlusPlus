@@ -119,6 +119,9 @@ typedef MDIFrame* MDIFramePtr;
 class MDIParent;
 typedef MDIParent* MDIParentPtr;
 
+class MonthCalendar;
+typedef MonthCalendar* MonthCalendarPtr;
+
 // Not a Color - corresponds to 1 + 0xFFFFFF (the max value of a COLORREF)
 static const COLORREF NaC = 0x1000000;
 

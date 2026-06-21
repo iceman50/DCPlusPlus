@@ -32,21 +32,194 @@
 #include <dwt/Taskbar.h>
 
 #include <dwmapi.h>
+#include <objectarray.h>
+#include <propkey.h>
+#include <propsys.h>
 
 #include <dwt/util/check.h>
+#include <dwt/util/StringConversion.h>
+#include <dwt/util/win32/FileDialog.h>
 #include <dwt/util/win32/Version.h>
 #include <dwt/widgets/Container.h>
 #include <dwt/widgets/Window.h>
 
 namespace dwt {
 
+namespace {
+
+using util::win32::ComPtr;
+
+std::wstring toWide(const tstring& value) {
+	return util::UnicodeGuaranteed::doConvert(value, util::ConversionCodepage::ANSI);
+}
+
+std::wstring modulePath() {
+	std::wstring value(MAX_PATH, L'\0');
+	DWORD length = ::GetModuleFileNameW(nullptr, &value[0], static_cast<DWORD>(value.size()));
+	while(length == value.size()) {
+		value.resize(value.size() * 2, L'\0');
+		length = ::GetModuleFileNameW(nullptr, &value[0], static_cast<DWORD>(value.size()));
+	}
+	value.resize(length);
+	return value;
+}
+
+PROPVARIANT stringVariant(const std::wstring& value) {
+	PROPVARIANT variant = { };
+	variant.vt = VT_LPWSTR;
+	variant.pwszVal = const_cast<PWSTR>(value.c_str());
+	return variant;
+}
+
+PROPVARIANT boolVariant(bool value) {
+	PROPVARIANT variant = { };
+	variant.vt = VT_BOOL;
+	variant.boolVal = value ? VARIANT_TRUE : VARIANT_FALSE;
+	return variant;
+}
+
+HRESULT setStringProperty(IPropertyStore& store, REFPROPERTYKEY key,
+	const std::wstring& value)
+{
+	auto variant = stringVariant(value);
+	return store.SetValue(key, variant);
+}
+
+HRESULT setBoolProperty(IPropertyStore& store, REFPROPERTYKEY key, bool value) {
+	auto variant = boolVariant(value);
+	return store.SetValue(key, variant);
+}
+
+HRESULT createShellLink(const JumpListLink& item, IShellLinkW** value) {
+	if(!value) {
+		return E_POINTER;
+	}
+	*value = nullptr;
+
+	ComPtr<IShellLinkW> link;
+	auto result = ::CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+		IID_IShellLinkW, reinterpret_cast<void**>(link.put()));
+	if(FAILED(result)) {
+		return result;
+	}
+
+	ComPtr<IPropertyStore> properties;
+	result = link->QueryInterface(IID_IPropertyStore,
+		reinterpret_cast<void**>(properties.put()));
+	if(FAILED(result)) {
+		return result;
+	}
+
+	if(item.separator) {
+		result = setBoolProperty(*properties.get(), PKEY_AppUserModel_IsDestListSeparator, true);
+		if(FAILED(result)) {
+			return result;
+		}
+		result = properties->Commit();
+		if(FAILED(result)) {
+			return result;
+		}
+		*value = link.detach();
+		return S_OK;
+	}
+
+	if(item.title.empty()) {
+		return E_INVALIDARG;
+	}
+
+	auto path = item.path.empty() ? modulePath() : toWide(item.path);
+	result = link->SetPath(path.c_str());
+	if(FAILED(result)) {
+		return result;
+	}
+
+	auto arguments = toWide(item.arguments);
+	if(!arguments.empty()) {
+		result = link->SetArguments(arguments.c_str());
+		if(FAILED(result)) {
+			return result;
+		}
+	}
+
+	auto workingDirectory = toWide(item.workingDirectory);
+	if(!workingDirectory.empty()) {
+		result = link->SetWorkingDirectory(workingDirectory.c_str());
+		if(FAILED(result)) {
+			return result;
+		}
+	}
+
+	auto iconPath = item.iconPath.empty() ? path : toWide(item.iconPath);
+	if(!iconPath.empty()) {
+		result = link->SetIconLocation(iconPath.c_str(), item.iconIndex);
+		if(FAILED(result)) {
+			return result;
+		}
+	}
+
+	auto description = toWide(item.description);
+	if(!description.empty()) {
+		result = link->SetDescription(description.c_str());
+		if(FAILED(result)) {
+			return result;
+		}
+	}
+
+	result = setStringProperty(*properties.get(), PKEY_Title, toWide(item.title));
+	if(FAILED(result)) {
+		return result;
+	}
+
+	result = properties->Commit();
+	if(FAILED(result)) {
+		return result;
+	}
+
+	*value = link.detach();
+	return S_OK;
+}
+
+HRESULT makeObjectArray(const std::vector<JumpListLink>& items, IObjectArray** value) {
+	if(!value) {
+		return E_POINTER;
+	}
+	*value = nullptr;
+
+	ComPtr<IObjectCollection> collection;
+	auto result = ::CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr,
+		CLSCTX_INPROC_SERVER, IID_IObjectCollection,
+		reinterpret_cast<void**>(collection.put()));
+	if(FAILED(result)) {
+		return result;
+	}
+
+	for(const auto& item : items) {
+		ComPtr<IShellLinkW> link;
+		result = createShellLink(item, link.put());
+		if(FAILED(result)) {
+			return result;
+		}
+		result = collection->AddObject(link.get());
+		if(FAILED(result)) {
+			return result;
+		}
+	}
+
+	return collection->QueryInterface(IID_IObjectArray, reinterpret_cast<void**>(value));
+}
+
+}
+
 Taskbar::Taskbar() :
 taskbar(0),
+taskbar4(0),
 window(0)
 {
 }
 
 Taskbar::~Taskbar() {
+	if(taskbar4)
+		taskbar4->Release();
 	if(taskbar)
 		taskbar->Release();
 }
@@ -59,20 +232,154 @@ void Taskbar::initTaskbar(WindowPtr window_) {
 	"TaskbarButtonCreated" message, but neither MFC nor Win SDK samples do that, so we don't
 	either. greatly simplifies the logic of this interface. */
 #ifdef __GNUC__
-	/// @todo remove when GCC knows about ITaskbarList
 	CLSID CLSID_TaskbarList;
 	OLECHAR tbl[] = L"{56FDF344-FD6D-11d0-958A-006097C9A090}";
 	CLSIDFromString(tbl, &CLSID_TaskbarList);
-	IID IID_ITaskbarList;
-	OLECHAR itbl[] = L"{56FDF342-FD6D-11d0-958A-006097C9A090}";
-	CLSIDFromString(itbl, &IID_ITaskbarList);
+	IID IID_ITaskbarList3;
+	OLECHAR itbl[] = L"{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEA84}";
+	CLSIDFromString(itbl, &IID_ITaskbarList3);
 #endif
-	if(::CoCreateInstance(CLSID_TaskbarList, 0, CLSCTX_INPROC_SERVER, IID_ITaskbarList,
+	if(::CoCreateInstance(CLSID_TaskbarList, 0, CLSCTX_INPROC_SERVER, IID_ITaskbarList3,
 		reinterpret_cast<LPVOID*>(&taskbar)) != S_OK) { taskbar = 0; }
 	if(taskbar && taskbar->HrInit() != S_OK) {
 			taskbar->Release();
 			taskbar = 0;
 	}
+	if(taskbar && taskbar->QueryInterface(IID_ITaskbarList4,
+		reinterpret_cast<void**>(&taskbar4)) != S_OK) {
+		taskbar4 = 0;
+	}
+}
+
+HRESULT Taskbar::setCurrentAppId(const tstring& appId) {
+	auto value = toWide(appId);
+	return ::SetCurrentProcessExplicitAppUserModelID(value.empty() ? nullptr : value.c_str());
+}
+
+HRESULT Taskbar::setWindowAppId(HWND window, const tstring& appId) {
+	if(!window) {
+		return E_HANDLE;
+	}
+
+	ComPtr<IPropertyStore> properties;
+	auto result = ::SHGetPropertyStoreForWindow(window, IID_IPropertyStore,
+		reinterpret_cast<void**>(properties.put()));
+	if(FAILED(result)) {
+		return result;
+	}
+
+	auto value = toWide(appId);
+	if(value.empty()) {
+		PROPVARIANT empty = { };
+		result = properties->SetValue(PKEY_AppUserModel_ID, empty);
+	} else {
+		result = setStringProperty(*properties.get(), PKEY_AppUserModel_ID, value);
+	}
+	if(FAILED(result)) {
+		return result;
+	}
+
+	return properties->Commit();
+}
+
+HRESULT Taskbar::setWindowAppId(WindowPtr window, const tstring& appId) {
+	return window ? setWindowAppId(window->handle(), appId) : E_HANDLE;
+}
+
+HRESULT Taskbar::commitJumpList(const JumpList& jumpList, UINT* minSlots) {
+	ComPtr<ICustomDestinationList> list;
+	auto result = ::CoCreateInstance(CLSID_DestinationList, nullptr,
+		CLSCTX_INPROC_SERVER, IID_ICustomDestinationList,
+		reinterpret_cast<void**>(list.put()));
+	if(FAILED(result)) {
+		return result;
+	}
+
+	auto appId = toWide(jumpList.appId);
+	if(!appId.empty()) {
+		result = list->SetAppID(appId.c_str());
+		if(FAILED(result)) {
+			return result;
+		}
+	}
+
+	UINT slots = 0;
+	ComPtr<IObjectArray> removed;
+	result = list->BeginList(&slots, IID_IObjectArray,
+		reinterpret_cast<void**>(removed.put()));
+	if(FAILED(result)) {
+		return result;
+	}
+
+	auto abortList = [&list] {
+		list->AbortList();
+	};
+
+	if(jumpList.showFrequent) {
+		result = list->AppendKnownCategory(KDC_FREQUENT);
+		if(FAILED(result)) {
+			abortList();
+			return result;
+		}
+	}
+
+	if(jumpList.showRecent) {
+		result = list->AppendKnownCategory(KDC_RECENT);
+		if(FAILED(result)) {
+			abortList();
+			return result;
+		}
+	}
+
+	for(const auto& category : jumpList.categories) {
+		if(category.name.empty() || category.links.empty()) {
+			continue;
+		}
+		ComPtr<IObjectArray> items;
+		result = makeObjectArray(category.links, items.put());
+		if(FAILED(result)) {
+			abortList();
+			return result;
+		}
+		result = list->AppendCategory(toWide(category.name).c_str(), items.get());
+		if(FAILED(result)) {
+			abortList();
+			return result;
+		}
+	}
+
+	if(!jumpList.userTasks.empty()) {
+		ComPtr<IObjectArray> tasks;
+		result = makeObjectArray(jumpList.userTasks, tasks.put());
+		if(FAILED(result)) {
+			abortList();
+			return result;
+		}
+		result = list->AddUserTasks(tasks.get());
+		if(FAILED(result)) {
+			abortList();
+			return result;
+		}
+	}
+
+	result = list->CommitList();
+	if(SUCCEEDED(result) && minSlots) {
+		*minSlots = slots;
+	}
+	return result;
+}
+
+HRESULT Taskbar::deleteJumpList(const tstring& appId) {
+	ComPtr<ICustomDestinationList> list;
+	auto result = ::CoCreateInstance(CLSID_DestinationList, nullptr,
+		CLSCTX_INPROC_SERVER, IID_ICustomDestinationList,
+		reinterpret_cast<void**>(list.put()));
+	if(FAILED(result)) {
+		return result;
+	}
+
+	auto value = toWide(appId);
+	return list->DeleteList(value.empty() ? nullptr : value.c_str());
 }
 
 class Proxy : public Frame {
@@ -96,6 +403,10 @@ public:
 };
 
 void Taskbar::addToTaskbar(ContainerPtr tab) {
+	if(!taskbar || !window) {
+		return;
+	}
+
 	/* for Windows to acknowledge that our tab window is worthy of having its own thumbnail in the
 	taskbar, we have to create an invisible popup window that will act as a proxy between the
 	taskbar and the actual tab window.
@@ -165,27 +476,44 @@ void Taskbar::addToTaskbar(ContainerPtr tab) {
 }
 
 void Taskbar::removeFromTaskbar(ContainerPtr tab) {
-	auto proxy = tabs[tab];
-	taskbar->UnregisterTab(proxy->handle());
-	::DestroyWindow(proxy->handle());
-	tabs.erase(tab);
+	auto i = tabs.find(tab);
+	if(i == tabs.end() || !i->second) {
+		return;
+	}
+	if(taskbar) {
+		taskbar->UnregisterTab(i->second->handle());
+	}
+	::DestroyWindow(i->second->handle());
+	tabs.erase(i);
 }
 
 void Taskbar::moveOnTaskbar(ContainerPtr tab, ContainerPtr rightNeighbor) {
-	taskbar->SetTabOrder(tabs[tab]->handle(), rightNeighbor ? tabs[rightNeighbor]->handle() : 0);
+	auto i = tabs.find(tab);
+	if(taskbar && i != tabs.end() && i->second) {
+		auto right = rightNeighbor ? tabs.find(rightNeighbor) : tabs.end();
+		taskbar->SetTabOrder(i->second->handle(),
+			right != tabs.end() && right->second ? right->second->handle() : 0);
+	}
 }
 
 void Taskbar::setActiveOnTaskbar(ContainerPtr tab) {
-	taskbar->SetTabActive(tabs[tab]->handle(), window->handle(), 0);
+	auto i = tabs.find(tab);
+	if(taskbar && window && i != tabs.end() && i->second) {
+		taskbar->SetTabActive(i->second->handle(), window->handle(), 0);
+	}
 }
 
 void Taskbar::setTaskbarIcon(ContainerPtr tab, const IconPtr& icon) {
-	tabs[tab]->setSmallIcon(icon);
+	auto i = tabs.find(tab);
+	if(i != tabs.end() && i->second) {
+		i->second->setSmallIcon(icon);
+	}
 }
 
 void Taskbar::setOverlayIcon(ContainerPtr tab, const IconPtr& icon, const tstring& description) {
-	if(taskbar) {
-		taskbar->SetOverlayIcon(window->handle(), icon->handle(), description.c_str());
+	if(taskbar && window) {
+		taskbar->SetOverlayIcon(window->handle(), icon ? icon->handle() : nullptr,
+			description.c_str());
 	}
 }
 
@@ -199,6 +527,99 @@ void Taskbar::setProgressValue(ULONGLONG completed, ULONGLONG total) {
 	if(taskbar && window) {
 		taskbar->SetProgressValue(window->handle(), completed, total);
 	}
+}
+
+void Taskbar::addThumbnailToolbarButtons(const std::vector<THUMBBUTTON>& buttons) {
+	if(taskbar && window && !buttons.empty()) {
+		auto copy = buttons;
+		taskbar->ThumbBarAddButtons(window->handle(), static_cast<UINT>(copy.size()), copy.data());
+	}
+}
+
+void Taskbar::updateThumbnailToolbarButtons(const std::vector<THUMBBUTTON>& buttons) {
+	if(taskbar && window && !buttons.empty()) {
+		auto copy = buttons;
+		taskbar->ThumbBarUpdateButtons(window->handle(), static_cast<UINT>(copy.size()), copy.data());
+	}
+}
+
+void Taskbar::setThumbnailTooltip(const tstring& tooltip) {
+	if(taskbar && window) {
+		taskbar->SetThumbnailTooltip(window->handle(), tooltip.empty() ? nullptr : tooltip.c_str());
+	}
+}
+
+void Taskbar::setThumbnailClip(const Rectangle& clip) {
+	if(taskbar && window) {
+		auto rect = clip.toRECT();
+		taskbar->SetThumbnailClip(window->handle(), &rect);
+	}
+}
+
+void Taskbar::clearThumbnailClip() {
+	if(taskbar && window) {
+		taskbar->SetThumbnailClip(window->handle(), nullptr);
+	}
+}
+
+void Taskbar::addThumbnailToolbarButtons(ContainerPtr tab,
+	const std::vector<THUMBBUTTON>& buttons)
+{
+	auto handle = getTaskbarWindow(tab);
+	if(taskbar && handle && !buttons.empty()) {
+		auto copy = buttons;
+		taskbar->ThumbBarAddButtons(handle, static_cast<UINT>(copy.size()), copy.data());
+	}
+}
+
+void Taskbar::updateThumbnailToolbarButtons(ContainerPtr tab,
+	const std::vector<THUMBBUTTON>& buttons)
+{
+	auto handle = getTaskbarWindow(tab);
+	if(taskbar && handle && !buttons.empty()) {
+		auto copy = buttons;
+		taskbar->ThumbBarUpdateButtons(handle, static_cast<UINT>(copy.size()), copy.data());
+	}
+}
+
+void Taskbar::setThumbnailTooltip(ContainerPtr tab, const tstring& tooltip) {
+	auto handle = getTaskbarWindow(tab);
+	if(taskbar && handle) {
+		taskbar->SetThumbnailTooltip(handle, tooltip.empty() ? nullptr : tooltip.c_str());
+	}
+}
+
+void Taskbar::setThumbnailClip(ContainerPtr tab, const Rectangle& clip) {
+	auto handle = getTaskbarWindow(tab);
+	if(taskbar && handle) {
+		auto rect = clip.toRECT();
+		taskbar->SetThumbnailClip(handle, &rect);
+	}
+}
+
+void Taskbar::clearThumbnailClip(ContainerPtr tab) {
+	auto handle = getTaskbarWindow(tab);
+	if(taskbar && handle) {
+		taskbar->SetThumbnailClip(handle, nullptr);
+	}
+}
+
+void Taskbar::setTabProperties(ContainerPtr tab, STPFLAG properties) {
+	auto handle = getTaskbarWindow(tab);
+	if(taskbar4 && handle) {
+		taskbar4->SetTabProperties(handle, properties);
+	}
+}
+
+HWND Taskbar::getTaskbarWindow(ContainerPtr tab) const {
+	if(!tab) {
+		return window ? window->handle() : nullptr;
+	}
+	auto i = tabs.find(tab);
+	if(i != tabs.end() && i->second) {
+		return i->second->handle();
+	}
+	return tab->handle();
 }
 
 BitmapPtr Taskbar::getBitmap(ContainerPtr tab, LPARAM thumbnailSize) {

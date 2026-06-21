@@ -30,6 +30,7 @@
 #include <dwt/widgets/Grid.h>
 #include <dwt/widgets/Label.h>
 #include <dwt/widgets/Link.h>
+#include <dwt/Message.h>
 
 #include "resource.h"
 #include "WinUtil.h"
@@ -38,6 +39,10 @@ using dwt::Grid;
 using dwt::GridInfo;
 using dwt::Label;
 using dwt::Link;
+
+namespace {
+	constexpr UINT WM_ABOUTDLG_VERSION_RESULT = WM_APP + 0x1D1;
+}
 
 static const char thanks[] = "Big thanks to all donators and people who have contributed with ideas "
 "and code! Thanks go out to sourceforge.net for hosting the project. "
@@ -174,6 +179,20 @@ bool AboutDlg::handleInitDialog() {
 	setSmallIcon(WinUtil::createIcon(IDI_DCPP, 16));
 	setLargeIcon(WinUtil::createIcon(IDI_DCPP, 32));
 
+	addCallback(dwt::Message(WM_ABOUTDLG_VERSION_RESULT), [this](const MSG&, LRESULT& ret) {
+		bool success;
+		string result;
+		{
+			std::lock_guard<std::mutex> lock(downloadResultCS);
+			success = downloadResultSuccess;
+			result = downloadResult;
+		}
+
+		completeDownload(success, result);
+		ret = 0;
+		return true;
+	});
+
 	layout();
 	centerWindow();
 
@@ -196,13 +215,11 @@ void AboutDlg::completeDownload(bool success, const string& result) {
 		try {
 			SimpleXML xml;
 			xml.fromXML(result);
-			if(xml.findChild("DCUpdate")) {
-				xml.stepIn();
-				if(xml.findChild("Version")) {
-					const auto& ver = xml.getChildData();
-					if(!ver.empty()) {
-						str = Text::toT(ver);
-					}
+			xml.stepIn();
+			if(xml.findChild("Version")) {
+				const auto& ver = xml.getChildData();
+				if(!ver.empty()) {
+					str = Text::toT(ver);
 				}
 			}
 		} catch(const SimpleXMLException&) {
@@ -213,17 +230,26 @@ void AboutDlg::completeDownload(bool success, const string& result) {
 	version->setText(str.empty() ? Text::toT(result) : str);
 }
 
+void AboutDlg::postDownloadResult(bool success, const string& result) {
+	{
+		std::lock_guard<std::mutex> lock(downloadResultCS);
+		downloadResultSuccess = success;
+		downloadResult = result;
+	}
+
+	postMessage(WM_ABOUTDLG_VERSION_RESULT, 0, 0);
+}
+
 void AboutDlg::on(HttpManagerListener::Failed, HttpConnection* c, const string& str) noexcept {
 	if(c != this->c) { return; }
-	c = nullptr;
-
-	callAsync([str, this] { completeDownload(false, str); });
+	this->c = nullptr;
+	postDownloadResult(false, str);
 }
 
 void AboutDlg::on(HttpManagerListener::Complete, HttpConnection* c, OutputStream* stream) noexcept {
 	if(c != this->c) { return; }
-	c = nullptr;
+	this->c = nullptr;
 
 	auto str = static_cast<StringOutputStream*>(stream)->getString();
-	callAsync([str, this] { completeDownload(true, str); });
+	postDownloadResult(true, str);
 }

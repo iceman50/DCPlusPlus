@@ -88,8 +88,19 @@ void Tree::create( const Seed & cs )
 	forwardMsg(Message(WM_SETFONT));
 	forwardMsg(Message(WM_SETREDRAW));
 
-	tree->onCustomDraw([this](NMTVCUSTOMDRAW& x) { return draw(x); });
+	tree->onCustomDraw([this](NMTVCUSTOMDRAW& x) {
+		if(customDraw) {
+			auto result = customDraw(x);
+			if(result && result != CDRF_DODEFAULT) {
+				return result;
+			}
+		}
+		return draw(x);
+	});
 
+	// Establish a real default GUI font on the composite and forward it to the
+	// native tree. Without this, a header created later can inherit a null
+	// WM_GETFONT value and fall back to the legacy system stock font.
 	setFont(cs.font);
 	onDpiResourcesChanged([this](const DpiResourceEvent& event) {
 		if(itsNormalImageList) {
@@ -102,6 +113,13 @@ void Tree::create( const Seed & cs )
 		}
 	});
 	layout();
+}
+
+void Tree::setFontImpl() {
+	BaseType::setFontImpl();
+	if(header) {
+		header->setFont(getFont());
+	}
 }
 
 HTREEITEM Tree::insert(const tstring& text, HTREEITEM parentItem, HTREEITEM insertAfter,
@@ -276,9 +294,24 @@ void Tree::setDoubleBuffered(bool value) {
 	setExtendedStyle(value ? TVS_EX_DOUBLEBUFFER : 0, TVS_EX_DOUBLEBUFFER);
 }
 
+bool Tree::getItemSelected(HTREEITEM item) const {
+	return (TreeView_GetItemState(treeHandle(), item, TVIS_SELECTED) &
+		TVIS_SELECTED) != 0;
+}
+
+void Tree::setItemSelected(HTREEITEM item, bool selected) {
+	TVITEM value = { TVIF_HANDLE | TVIF_STATE, item };
+	value.stateMask = TVIS_SELECTED;
+	value.state = selected ? TVIS_SELECTED : 0;
+	TreeView_SetItem(treeHandle(), &value);
+}
+
 std::vector<HTREEITEM> Tree::getSelectedItems() const {
 	std::vector<HTREEITEM> items;
-	auto item = TreeView_GetSelection(treeHandle());
+	auto item = TreeView_GetNextItem(treeHandle(), nullptr, TVGN_NEXTSELECTED);
+	if(!item) {
+		item = TreeView_GetSelection(treeHandle());
+	}
 	while(item) {
 		items.push_back(item);
 		item = TreeView_GetNextItem(treeHandle(), item, TVGN_NEXTSELECTED);
@@ -362,6 +395,10 @@ void Tree::onTreeKeyDown(std::function<void (const NMTVKEYDOWN&)> f) {
 			f(*reinterpret_cast<const NMTVKEYDOWN*>(msg.lParam));
 			return true;
 		});
+}
+
+void Tree::onCustomDraw(std::function<LRESULT (NMTVCUSTOMDRAW&)> f) {
+	customDraw = f;
 }
 
 ImageListPtr Tree::createDragImage(HTREEITEM item) const {

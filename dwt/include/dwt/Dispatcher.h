@@ -114,6 +114,39 @@ private:
 	NormalDispatcher(LPCTSTR name);
 };
 
+class MDIFrameDispatcher : public Dispatcher {
+public:
+	static Dispatcher& getDefault();
+
+	virtual LRESULT chain(const MSG& msg);
+
+private:
+	MDIFrameDispatcher(LPCTSTR name);
+};
+
+class MDIChildDispatcher : public Dispatcher {
+public:
+	static Dispatcher& getDefault();
+
+	virtual LRESULT chain(const MSG& msg);
+
+private:
+	MDIChildDispatcher(WNDCLASSEX& cls);
+};
+
+class MDIClientDispatcher : public Dispatcher {
+public:
+	static Dispatcher& getDefault();
+
+	virtual LRESULT chain(const MSG& msg);
+	void setWindowProc(WNDPROC wndProc_);
+
+private:
+	MDIClientDispatcher(LPCTSTR name);
+
+	WNDPROC wndProc;
+};
+
 class ChainingDispatcher : public Dispatcher {
 public:
 	template<typename T>

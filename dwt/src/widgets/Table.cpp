@@ -95,6 +95,15 @@ void Table::create( const Seed & cs )
 	});
 }
 
+void Table::setFontImpl() {
+	BaseType::setFontImpl();
+	if(HWND header = ListView_GetHeader(handle())) {
+		auto font = getFont();
+		::SendMessage(header, WM_SETFONT,
+			reinterpret_cast<WPARAM>(font ? font->handle() : nullptr), TRUE);
+	}
+}
+
 Table::Table(dwt::Widget* parent) :
 BaseType(parent, ChainingDispatcher::superClass<Table>()),
 grouped(false),

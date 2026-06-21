@@ -57,6 +57,9 @@ class Mouse
 
 	typedef std::function<bool (const MouseEvent&)> F;
 	typedef std::function<bool (const PointerEvent&)> PointerF;
+	typedef std::function<bool (const TouchEvent&)> TouchF;
+	typedef std::function<bool (const GestureEvent&)> GestureF;
+	typedef std::function<bool (const GestureNotifyEvent&)> GestureNotifyF;
 
 public:
 	/// \ingroup EventHandlersaspects::Mouse
@@ -199,6 +202,21 @@ public:
 		onMouse(WM_MOUSEMOVE, f);
 	}
 
+	/** Handle mouse wheel events.
+	 *
+	 * In addition to a regular MouseEvent structure, a scrolling delta is also
+	 * provided. On Windows, that delta is a multiple of WHEEL_DELTA.
+	 *
+	 * Note: Dispatching rules for this message are special; Windows starts with
+	 * the focus window and walks up the parent chain.
+	 */
+	void onMouseWheel(std::function<void (const MouseEvent&, int)> f) {
+		W().addCallback(Message(WM_MOUSEWHEEL), [f](const MSG& msg, LRESULT&) -> bool {
+			f(MouseEvent(msg), static_cast<int>(GET_WHEEL_DELTA_WPARAM(msg.wParam)));
+			return true;
+		});
+	}
+
 	void onMouseLeave(std::function<void ()> f) {
 		TRACKMOUSEEVENT t = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, H() };
 		if(::TrackMouseEvent(&t)) {
@@ -215,6 +233,87 @@ public:
 	void onPointerEnter(PointerF f) { onPointer(WM_POINTERENTER, f); }
 	void onPointerLeave(PointerF f) { onPointer(WM_POINTERLEAVE, f); }
 	void onPointerCaptureChanged(PointerF f) { onPointer(WM_POINTERCAPTURECHANGED, f); }
+	void onPointerWheel(PointerF f) { onPointer(WM_POINTERWHEEL, f); }
+	void onPointerHWheel(PointerF f) { onPointer(WM_POINTERHWHEEL, f); }
+	void onPointerCanceled(PointerF f) {
+		onPointerFiltered(WM_POINTERUPDATE, f, true);
+		onPointerFiltered(WM_POINTERUP, f, true);
+		onPointerFiltered(WM_POINTERCAPTURECHANGED, f, true);
+	}
+
+	bool capturePointer() {
+		return ::SetCapture(H()) == H();
+	}
+
+	bool releasePointerCapture() {
+		return ::ReleaseCapture() != FALSE;
+	}
+
+	HWND getPointerCapture() const {
+		return ::GetCapture();
+	}
+
+	bool registerTouch(DWORD flags = 0) {
+		return ::RegisterTouchWindow(H(), flags) != FALSE;
+	}
+
+	bool unregisterTouch() {
+		return ::UnregisterTouchWindow(H()) != FALSE;
+	}
+
+	bool touchRegistered() const {
+		return ::IsTouchWindow(H(), nullptr) != FALSE;
+	}
+
+	void onTouch(TouchF f, DWORD flags = 0) {
+		registerTouch(flags);
+		W().addCallback(Message(WM_TOUCH), [f](const MSG& msg, LRESULT& ret) -> bool {
+			TouchEvent event(msg);
+			if(!event.valid) {
+				return false;
+			}
+			const bool handled = f(event);
+			if(handled) {
+				::CloseTouchInputHandle(reinterpret_cast<HTOUCHINPUT>(msg.lParam));
+				ret = 0;
+			}
+			return handled;
+		});
+	}
+
+	bool setGestureConfig(const std::vector<GESTURECONFIG>& config) {
+		if(config.empty()) {
+			return false;
+		}
+		return ::SetGestureConfig(H(), 0, static_cast<UINT>(config.size()),
+			const_cast<GESTURECONFIG*>(config.data()), sizeof(GESTURECONFIG)) != FALSE;
+	}
+
+	void onGesture(GestureF f) {
+		W().addCallback(Message(WM_GESTURE), [f](const MSG& msg, LRESULT& ret) -> bool {
+			GestureEvent event(msg);
+			if(!event.valid) {
+				return false;
+			}
+			const bool handled = f(event);
+			if(handled) {
+				::CloseGestureInfoHandle(reinterpret_cast<HGESTUREINFO>(msg.lParam));
+				ret = 0;
+			}
+			return handled;
+		});
+	}
+
+	void onGestureNotify(GestureNotifyF f) {
+		W().addCallback(Message(WM_GESTURENOTIFY), [f](const MSG& msg, LRESULT& ret) -> bool {
+			GestureNotifyEvent event(msg);
+			if(!event.valid) {
+				return false;
+			}
+			ret = 0;
+			return f(event);
+		});
+	}
 
 private:
 	void onMouse(UINT msg, F f) {
@@ -233,6 +332,13 @@ private:
 	void onPointer(UINT message, PointerF f) {
 		W().addCallback(Message(message), [f](const MSG& msg, LRESULT&) -> bool {
 			return f(PointerEvent(msg));
+		});
+	}
+
+	void onPointerFiltered(UINT message, PointerF f, bool canceled) {
+		W().addCallback(Message(message), [f, canceled](const MSG& msg, LRESULT&) -> bool {
+			PointerEvent event(msg);
+			return event.canceled == canceled ? f(event) : false;
 		});
 	}
 };

@@ -71,6 +71,16 @@ public:
 	  */
 	struct Seed : public BaseType::Seed
 	{
+		/**
+		 * First child id for the MDI window menu; must not overlap other frame menu ids.
+		 */
+		UINT mdiIdFirstChild;
+
+		/**
+		 * Submenu that receives the MDI child window list.
+		 */
+		HMENU mdiWindowMenu;
+
 		/// Fills with default parameters
 		Seed(const tstring& caption = tstring());
 	};
@@ -85,6 +95,8 @@ public:
 	void create( const Seed& cs = Seed() );
 
 	MDIParent* getMDIParent() { return mdi; }
+
+	virtual void layout();
 
 	virtual bool handleMessage( const MSG & msg, LRESULT & retVal );
 protected:
@@ -101,7 +113,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 inline MDIFrame::MDIFrame( Widget * parent )
-	: BaseType(parent, NormalDispatcher::getDefault()), mdi(0)
+	: BaseType(parent, MDIFrameDispatcher::getDefault()), mdi(0)
 {}
 
 inline MDIFrame::~MDIFrame()

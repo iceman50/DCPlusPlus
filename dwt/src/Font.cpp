@@ -48,7 +48,7 @@ Font::Font(LOGFONT& lf) :
 }
 
 Font::Font(Predefined predef) :
-	Font(reinterpret_cast<HFONT>(::GetStockObject(predef)), true)
+	Font(reinterpret_cast<HFONT>(::GetStockObject(predef)), false)
 {
 }
 

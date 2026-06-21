@@ -41,7 +41,6 @@ MDIChild::Seed::Seed(const tstring& caption) :
 }
 
 void MDIChild::createMDIChild( const Seed& cs ) {
-	getParent()->sendMessage(WM_SETREDRAW, FALSE);
 	HWND active = (HWND)(cs.activate ? NULL : getParent()->sendMessage(WM_MDIGETACTIVE));
 	HWND wnd = ::CreateMDIWindow( getDispatcher().getClassName(),
 		cs.caption.c_str(),
@@ -58,32 +57,10 @@ void MDIChild::createMDIChild( const Seed& cs ) {
 	if(active) {
 		getParent()->sendMessage(WM_MDIACTIVATE, (WPARAM)active);
 	}
-
-	getParent()->sendMessage(WM_SETREDRAW, TRUE);
-	redraw();
 }
 
 bool MDIChild::handleMessage(const MSG& msg, LRESULT& retVal) {
-	// Prevent some flicker...
-    if(msg.message == WM_NCPAINT || msg.message == WM_SIZE)
-    {
-	    if(getParent()->isActiveMaximized()) {
-		    if(msg.message == WM_NCPAINT) // non client area
-		    return true;
-
-		    if(msg.message == WM_SIZE) // client area
-		    {
-			    if((msg.wParam == SIZE_MAXIMIZED || msg.wParam == SIZE_RESTORED) && getParent()->getActive() == this) // active and maximized
-			    	return BaseType::handleMessage(msg, retVal);
-
-			    sendMessage(WM_SETREDRAW, FALSE);
-			    bool ret = BaseType::handleMessage(msg, retVal);
-			    sendMessage(WM_SETREDRAW, TRUE);
-			    return ret;
-		    }
-	    }
-    }
-    return BaseType::handleMessage(msg, retVal);
+	return BaseType::handleMessage(msg, retVal);
 }
 
 void MDIChild::activate() {

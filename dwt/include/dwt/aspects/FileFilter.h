@@ -115,13 +115,45 @@ public:
 		return W();
 	}
 
+	WidgetType& setForceFilesystem(bool force = true) {
+		itsForceFilesystem = force;
+		return W();
+	}
+
+	WidgetType& setInitialFolder(IShellItem* item) {
+		itsInitialFolder.reset(item);
+		return W();
+	}
+
 	WidgetType& addPlace(const tstring& path, bool top = false) {
 		itsPlaces.emplace_back(path, top ? FDAP_TOP : FDAP_BOTTOM);
 		return W();
 	}
 
+	WidgetType& addPlace(IShellItem* item, bool top = false) {
+		if(item) {
+			itsShellPlaces.emplace_back(util::win32::ShellItemPtr(item), top ? FDAP_TOP : FDAP_BOTTOM);
+		}
+		return W();
+	}
+
 	WidgetType& addOptions(FILEOPENDIALOGOPTIONS options) {
 		itsOptions |= options;
+		return W();
+	}
+
+	WidgetType& setFileDialogEvents(const util::win32::FileDialogEvents& events) {
+		itsEvents = events;
+		return W();
+	}
+
+	WidgetType& onFileDialogCustomize(const util::win32::FileDialogCustomizeCallback& callback) {
+		itsCustomize = callback;
+		return W();
+	}
+
+	WidgetType& onFileDialogControls(const util::win32::FileDialogControlsCallback& callback) {
+		itsControls = callback;
 		return W();
 	}
 
@@ -145,8 +177,14 @@ protected:
 		options.defaultExtension = itsDefExt;
 		options.filters = itsFilters;
 		options.places = itsPlaces;
+		options.shellPlaces = itsShellPlaces;
 		options.options = itsOptions;
+		options.forceFilesystem = itsForceFilesystem;
+		options.initialFolder = itsInitialFolder;
 		options.clientGuid = itsClientGuid ? &*itsClientGuid : nullptr;
+		options.events = itsEvents.empty() ? nullptr : &itsEvents;
+		options.customize = itsCustomize;
+		options.controls = itsControls;
 		return options;
 	}
 
@@ -159,8 +197,14 @@ private:
 	tstring itsTitle;
 	std::vector<std::pair<tstring, tstring>> itsFilters;
 	std::vector<std::pair<tstring, FDAP>> itsPlaces;
+	std::vector<std::pair<util::win32::ShellItemPtr, FDAP>> itsShellPlaces;
 	FILEOPENDIALOGOPTIONS itsOptions = 0;
+	bool itsForceFilesystem = true;
+	util::win32::ShellItemPtr itsInitialFolder;
 	std::optional<GUID> itsClientGuid;
+	util::win32::FileDialogEvents itsEvents;
+	util::win32::FileDialogCustomizeCallback itsCustomize;
+	util::win32::FileDialogControlsCallback itsControls;
 };
 
 } }

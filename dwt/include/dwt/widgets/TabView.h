@@ -92,6 +92,7 @@ public:
 
 		bool toggleActive; /// switch the active tab when clicking on the current active tab
 		bool ctrlTab; /// handle Ctrl+Tab and Ctrl+Shift+Tab
+		bool closeable; /// allow tabs to be closed from the tab strip
 
 		/// Fills with default parameters
 		Seed(unsigned widthConfig_ = 150, bool toggleActive_ = false, bool ctrlTab_ = false);
@@ -178,6 +179,7 @@ private:
 	// these can be set through the Seed
 	unsigned widthConfig;
 	bool toggleActive;
+	bool closeable;
 	FontPtr font;
 	FontPtr boldFont;
 	IconPtr closeIcon;

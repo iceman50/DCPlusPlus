@@ -35,6 +35,33 @@
 
 namespace dwt {
 
+namespace {
+
+const UINT32 maxPointerHistory = 256;
+
+template<typename T>
+T user32Function(const char* name) {
+	T function = nullptr;
+	auto address = ::GetProcAddress(::GetModuleHandle(_T("user32.dll")), name);
+	static_assert(sizeof(function) == sizeof(address), "Function pointer size mismatch");
+	std::memcpy(&function, &address, sizeof(function));
+	return function;
+}
+
+Rectangle touchContactRect(const TOUCHINPUT& input) {
+	if((input.dwMask & TOUCHINPUTMASKF_CONTACTAREA) == 0) {
+		return Rectangle();
+	}
+
+	const long x = TOUCH_COORD_TO_PIXEL(input.x);
+	const long y = TOUCH_COORD_TO_PIXEL(input.y);
+	const long width = TOUCH_COORD_TO_PIXEL(input.cxContact);
+	const long height = TOUCH_COORD_TO_PIXEL(input.cyContact);
+	return Rectangle(x - width / 2, y - height / 2, width, height);
+}
+
+}
+
 DpiChangedEvent::DpiChangedEvent(unsigned oldDpi_, const MSG& msg) :
 	oldDpi(oldDpi_),
 	newDpi(LOWORD(msg.wParam)),
@@ -105,23 +132,189 @@ MouseEvent::MouseEvent(const MSG& msg) {
 }
 
 PointerEvent::PointerEvent(const MSG& msg) :
-	id(LOWORD(msg.wParam)),
+	id(GET_POINTERID_WPARAM(msg.wParam)),
 	type(Unknown),
 	pos(Point(GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam))),
-	flags(HIWORD(msg.wParam))
+	flags(HIWORD(msg.wParam)),
+	wheelDelta(0),
+	infoAvailable(false),
+	touchInfoAvailable(false),
+	penInfoAvailable(false),
+	primary(false),
+	inContact(false),
+	canceled((flags & POINTER_MESSAGE_FLAG_CANCELED) != 0),
+	info(),
+	touchInfo(),
+	penInfo()
 {
-	typedef BOOL (WINAPI *GetPointerTypeFunction)(UINT32, int*);
-	static GetPointerTypeFunction getPointerType = [] {
-		GetPointerTypeFunction function = nullptr;
-		auto address = ::GetProcAddress(::GetModuleHandle(_T("user32.dll")), "GetPointerType");
-		static_assert(sizeof(function) == sizeof(address), "Function pointer size mismatch");
-		std::memcpy(&function, &address, sizeof(function));
-		return function;
-	}();
-	int nativeType = 0;
+	typedef BOOL (WINAPI *GetPointerTypeFunction)(UINT32, POINTER_INPUT_TYPE*);
+	typedef BOOL (WINAPI *GetPointerInfoFunction)(UINT32, POINTER_INFO*);
+	typedef BOOL (WINAPI *GetPointerInfoHistoryFunction)(UINT32, UINT32*, POINTER_INFO*);
+	typedef BOOL (WINAPI *GetPointerTouchInfoFunction)(UINT32, POINTER_TOUCH_INFO*);
+	typedef BOOL (WINAPI *GetPointerTouchInfoHistoryFunction)(UINT32, UINT32*, POINTER_TOUCH_INFO*);
+	typedef BOOL (WINAPI *GetPointerPenInfoFunction)(UINT32, POINTER_PEN_INFO*);
+	typedef BOOL (WINAPI *GetPointerPenInfoHistoryFunction)(UINT32, UINT32*, POINTER_PEN_INFO*);
+
+	static auto getPointerType = user32Function<GetPointerTypeFunction>("GetPointerType");
+	static auto getPointerInfo = user32Function<GetPointerInfoFunction>("GetPointerInfo");
+	static auto getPointerInfoHistory =
+		user32Function<GetPointerInfoHistoryFunction>("GetPointerInfoHistory");
+	static auto getPointerTouchInfo =
+		user32Function<GetPointerTouchInfoFunction>("GetPointerTouchInfo");
+	static auto getPointerTouchInfoHistory =
+		user32Function<GetPointerTouchInfoHistoryFunction>("GetPointerTouchInfoHistory");
+	static auto getPointerPenInfo =
+		user32Function<GetPointerPenInfoFunction>("GetPointerPenInfo");
+	static auto getPointerPenInfoHistory =
+		user32Function<GetPointerPenInfoHistoryFunction>("GetPointerPenInfoHistory");
+
+	POINTER_INPUT_TYPE nativeType = 0;
 	if(getPointerType && getPointerType(id, &nativeType)) {
 		type = static_cast<Type>(nativeType);
 	}
+
+	if(getPointerInfo && getPointerInfo(id, &info)) {
+		infoAvailable = true;
+		type = static_cast<Type>(info.pointerType);
+		flags = info.pointerFlags;
+		pos = ScreenCoordinate(Point(info.ptPixelLocation));
+		wheelDelta = info.InputData;
+		primary = (info.pointerFlags & POINTER_FLAG_PRIMARY) != 0;
+		inContact = (info.pointerFlags & POINTER_FLAG_INCONTACT) != 0;
+		canceled = (info.pointerFlags & POINTER_FLAG_CANCELED) != 0;
+
+		if(getPointerInfoHistory && info.historyCount > 1 &&
+			info.historyCount <= maxPointerHistory) {
+			auto count = info.historyCount;
+			history.resize(count);
+			if(!getPointerInfoHistory(id, &count, history.data())) {
+				history.clear();
+			} else {
+				history.resize(count);
+			}
+		}
+	} else {
+		primary = (flags & POINTER_MESSAGE_FLAG_PRIMARY) != 0;
+		inContact = (flags & POINTER_MESSAGE_FLAG_INCONTACT) != 0;
+	}
+
+	if(type == Touch && getPointerTouchInfo &&
+		getPointerTouchInfo(id, &touchInfo)) {
+		touchInfoAvailable = true;
+		if(getPointerTouchInfoHistory && infoAvailable && info.historyCount > 1 &&
+			info.historyCount <= maxPointerHistory) {
+			auto count = info.historyCount;
+			touchHistory.resize(count);
+			if(!getPointerTouchInfoHistory(id, &count, touchHistory.data())) {
+				touchHistory.clear();
+			} else {
+				touchHistory.resize(count);
+			}
+		}
+	}
+
+	if(type == Pen && getPointerPenInfo && getPointerPenInfo(id, &penInfo)) {
+		penInfoAvailable = true;
+		if(getPointerPenInfoHistory && infoAvailable && info.historyCount > 1 &&
+			info.historyCount <= maxPointerHistory) {
+			auto count = info.historyCount;
+			penHistory.resize(count);
+			if(!getPointerPenInfoHistory(id, &count, penHistory.data())) {
+				penHistory.clear();
+			} else {
+				penHistory.resize(count);
+			}
+		}
+	}
+}
+
+TouchEvent::TouchEvent(const MSG& msg) :
+	valid(false)
+{
+	const auto count = static_cast<UINT>(LOWORD(msg.wParam));
+	if(!count) {
+		return;
+	}
+
+	std::vector<TOUCHINPUT> inputs(count);
+	if(!::GetTouchInputInfo(reinterpret_cast<HTOUCHINPUT>(msg.lParam), count,
+		inputs.data(), sizeof(TOUCHINPUT))) {
+		return;
+	}
+
+	points.reserve(inputs.size());
+	for(const auto& input: inputs) {
+		TouchPoint point;
+		point.id = input.dwID;
+		point.pos = ScreenCoordinate(
+			Point(TOUCH_COORD_TO_PIXEL(input.x), TOUCH_COORD_TO_PIXEL(input.y)));
+		point.contact = touchContactRect(input);
+		point.flags = input.dwFlags;
+		point.mask = input.dwMask;
+		point.time = input.dwTime;
+		point.extraInfo = input.dwExtraInfo;
+		point.down = (input.dwFlags & TOUCHEVENTF_DOWN) != 0;
+		point.up = (input.dwFlags & TOUCHEVENTF_UP) != 0;
+		point.move = (input.dwFlags & TOUCHEVENTF_MOVE) != 0;
+		point.primary = (input.dwFlags & TOUCHEVENTF_PRIMARY) != 0;
+		point.palm = (input.dwFlags & TOUCHEVENTF_PALM) != 0;
+		point.pen = (input.dwFlags & TOUCHEVENTF_PEN) != 0;
+		point.hasContact = (input.dwMask & TOUCHINPUTMASKF_CONTACTAREA) != 0;
+		point.raw = input;
+		points.push_back(point);
+	}
+	valid = true;
+}
+
+GestureEvent::GestureEvent(const MSG& msg) :
+	valid(false),
+	type(Begin),
+	pos(Point()),
+	flags(0),
+	instanceId(0),
+	sequenceId(0),
+	arguments(0),
+	info()
+{
+	info.cbSize = sizeof(info);
+	if(!::GetGestureInfo(reinterpret_cast<HGESTUREINFO>(msg.lParam), &info)) {
+		return;
+	}
+
+	valid = true;
+	type = static_cast<Type>(info.dwID);
+	pos = ScreenCoordinate(Point(info.ptsLocation.x, info.ptsLocation.y));
+	flags = info.dwFlags;
+	instanceId = info.dwInstanceID;
+	sequenceId = info.dwSequenceID;
+	arguments = info.ullArguments;
+
+	if(info.cbExtraArgs) {
+		extraArgs.resize(info.cbExtraArgs);
+		if(!::GetGestureExtraArgs(reinterpret_cast<HGESTUREINFO>(msg.lParam),
+			info.cbExtraArgs, extraArgs.data())) {
+			extraArgs.clear();
+		}
+	}
+}
+
+GestureNotifyEvent::GestureNotifyEvent(const MSG& msg) :
+	valid(false),
+	pos(Point()),
+	flags(0),
+	instanceId(0),
+	info()
+{
+	auto source = reinterpret_cast<GESTURENOTIFYSTRUCT*>(msg.lParam);
+	if(!source || source->cbSize < sizeof(GESTURENOTIFYSTRUCT)) {
+		return;
+	}
+
+	info = *source;
+	valid = true;
+	pos = ScreenCoordinate(Point(info.ptsLocation.x, info.ptsLocation.y));
+	flags = info.dwFlags;
+	instanceId = info.dwInstanceID;
 }
 
 }
