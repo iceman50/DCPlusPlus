@@ -138,6 +138,7 @@ public:
 	void unregisterChild(MDIChildPtr child);
 	void onChildRegistered(const ChildFunction& f) { childRegistered = f; }
 	void onChildUnregistered(const ChildFunction& f) { childUnregistered = f; }
+	void onChildActivated(const ChildFunction& f) { childActivated = f; }
 	void onChildIconChanged(const ChildIconFunction& f) { childIconChanged = f; }
 	void setChildIcon(MDIChildPtr child, const IconPtr& icon);
 	void setActiveChild(MDIChildPtr child);
@@ -216,6 +217,7 @@ private:
 	bool hasAcceleratorFilter;
 	ChildFunction childRegistered;
 	ChildFunction childUnregistered;
+	ChildFunction childActivated;
 	ChildIconFunction childIconChanged;
 	COLORREF backgroundColor;
 	BitmapPtr backgroundImage;
@@ -232,6 +234,7 @@ inline MDIParent::MDIParent( Widget * parent )
 	hasAcceleratorFilter(false),
 	childRegistered(),
 	childUnregistered(),
+	childActivated(),
 	childIconChanged(),
 	backgroundColor(::GetSysColor(COLOR_APPWORKSPACE)),
 	backgroundImage(),

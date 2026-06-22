@@ -648,6 +648,7 @@ void MainWindow::initMDI() {
 	mdiPane->onSized([this](const dwt::SizedEvent&) { syncMDIClientBounds(); });
 	getMDI()->onChildRegistered([this](dwt::MDIChildPtr) { syncWindowTabs(); });
 	getMDI()->onChildUnregistered([this](dwt::MDIChildPtr) { syncWindowTabs(); });
+	getMDI()->onChildActivated([this](dwt::MDIChildPtr) { syncWindowTabs(); });
 	getMDI()->onChildIconChanged([this](dwt::MDIChildPtr child, const dwt::IconPtr& icon) {
 		if(mdiTabs && child) {
 			mdiTabs->setIcon(child, icon);

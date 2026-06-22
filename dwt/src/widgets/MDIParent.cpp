@@ -167,6 +167,9 @@ void MDIParent::setChildIcon(MDIChildPtr child, const IconPtr& icon)
 void MDIParent::setActiveChild(MDIChildPtr child)
 {
 	setActiveOnTaskbar(child);
+	if(childActivated) {
+		childActivated(child);
+	}
 }
 
 MDIParent::~MDIParent()
