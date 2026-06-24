@@ -94,10 +94,13 @@ public:
 	  */
 	void create( const Seed& cs = Seed() );
 
+	/// Returns the MDI client widget.
 	MDIParent* getMDIParent() { return mdi; }
 
+	/// Resizes the MDI client to fill the frame client area.
 	virtual void layout();
 
+	/// Handles frame messages and forwards WM_COMMAND to the active MDI child.
 	virtual bool handleMessage( const MSG & msg, LRESULT & retVal );
 protected:
 	// Protected since this Widget we HAVE to inherit from

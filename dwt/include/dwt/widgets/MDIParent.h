@@ -109,40 +109,57 @@ public:
 	  */
 	void create( const Seed & cs = Seed() );
 
+	/// Cascades all visible child windows.
 	void cascade() {
 		this->sendMessage(WM_MDICASCADE);
 	}
 
+	/// Tiles child windows horizontally or vertically.
 	void tile(bool horizontal) {
 		this->sendMessage(WM_MDITILE, horizontal ? MDITILE_HORIZONTAL : MDITILE_VERTICAL);
 	}
 
+	/// Arranges minimized child window icons.
 	void arrange() {
 		this->sendMessage(WM_MDIICONARRANGE);
 	}
 
+	/// Closes the active child window.
 	void closeActive() {
 		if(auto active = getActive()) {
 			active->postMessage(WM_CLOSE);
 		}
 	}
 
+	/// Closes all child windows.
 	void closeAll();
 
+	/// Returns all child windows.
 	std::vector<MDIChildPtr> getChildren() const;
 
+	/// Destroys a child window that belongs to this MDI parent.
 	void destroy(MDIChildPtr child);
 
+	/// Initializes taskbar integration and registers existing children.
 	void initTaskbar(FramePtr frame);
+	/// Registers a newly created child for taskbar and callbacks.
 	void registerChild(MDIChildPtr child);
+	/// Unregisters a child from taskbar and callbacks.
 	void unregisterChild(MDIChildPtr child);
+	/// Sets a callback invoked when a child is registered.
 	void onChildRegistered(const ChildFunction& f) { childRegistered = f; }
+	/// Sets a callback invoked when a child is unregistered.
 	void onChildUnregistered(const ChildFunction& f) { childUnregistered = f; }
+	/// Sets a callback invoked when a child becomes active.
 	void onChildActivated(const ChildFunction& f) { childActivated = f; }
+	/// Sets a callback invoked when a child icon changes.
 	void onChildIconChanged(const ChildIconFunction& f) { childIconChanged = f; }
+	/// Updates a child icon and notifies listeners.
 	void setChildIcon(MDIChildPtr child, const IconPtr& icon);
+	/// Marks a child as active and notifies listeners.
 	void setActiveChild(MDIChildPtr child);
 
+	/// Minimizes all MDI child windows.
 	void minimizeAll() {
 		for(HWND child = ::GetWindow(handle(), GW_CHILD); child; ) {
 			HWND nextChild = ::GetWindow(child, GW_HWNDNEXT);
@@ -153,52 +170,67 @@ public:
 		}
 	}
 
+	/// Returns the active child window, if any.
 	Widget* getActive() {
 		return hwnd_cast<Widget*>(reinterpret_cast<HWND>(this->sendMessage(WM_MDIGETACTIVE)));
 	}
 
+	/// Returns true if the active child is maximized.
 	bool isActiveMaximized() {
 		BOOL max = FALSE;
 		this->sendMessage(WM_MDIGETACTIVE, 0, reinterpret_cast<LPARAM>(&max));
 		return (max > 0);
 	}
 
+	/// Activates a child window that belongs to this MDI parent.
 	void setActive(dwt::Widget* widget) {
 		if(widget && ::GetParent(widget->handle()) == handle()) {
 			this->sendMessage(WM_MDIACTIVATE, reinterpret_cast<WPARAM>(widget->handle()));
 		}
 	}
 
+	/// Maximizes the currently active child window.
 	void maximizeActive() {
 		if(auto active = getActive()) {
 			this->sendMessage(WM_MDIMAXIMIZE, reinterpret_cast<WPARAM>(active->handle()));
 		}
 	}
 
+	/// Restores the currently active child window.
 	void restoreActive() {
 		if(auto active = getActive()) {
 			this->sendMessage(WM_MDIRESTORE, reinterpret_cast<WPARAM>(active->handle()));
 		}
 	}
 
+	/// Activates the next child window in Z-order.
 	void next() {
 		this->sendMessage(WM_MDINEXT, reinterpret_cast<WPARAM>(
 			getActive() ? getActive()->handle() : NULL), FALSE);
 	}
 
+	/// Activates the previous child window in Z-order.
 	void previous() {
 		this->sendMessage(WM_MDINEXT, reinterpret_cast<WPARAM>(
 			getActive() ? getActive()->handle() : NULL), TRUE);
 	}
 
+	/// Sets frame and window menus for the MDI client.
 	void setMenu(HMENU frameMenu, HMENU windowMenu);
+	/// Convenience overload taking Menu objects.
 	void setMenu(Menu* frameMenu, Menu* windowMenu);
+	/// Sets the MDI client background color.
 	void setBackgroundColor(COLORREF color);
+	/// Returns the current background color.
 	COLORREF getBackgroundColor() const { return backgroundColor; }
+	/// Sets a centered background bitmap.
 	void setBackgroundImage(const BitmapPtr& bitmap);
+	/// Sets a centered background icon.
 	void setBackgroundImage(const IconPtr& icon);
+	/// Clears the background image/icon.
 	void clearBackgroundImage();
 
+	/// Returns the owning MDI frame.
 	MDIFrame* getParent() { return static_cast<MDIFrame*>(BaseType::getParent()); }
 protected:
 	/// Constructor Taking pointer to parent

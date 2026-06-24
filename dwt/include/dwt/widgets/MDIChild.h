@@ -92,14 +92,23 @@ public:
 	  */
 	void createMDIChild( const Seed& cs = Seed() );
 
+	/// Activates this child.
+	/** Restores the child first if it is minimized.
+	  */
 	void activate();
+	/// Sets the small icon for this child.
 	void setSmallIcon(const IconPtr& icon);
+	/// Sets the large icon used for this child window.
 	void setLargeIcon(const IconPtr& icon);
+	/// Returns the small icon for this child.
 	const IconPtr& getSmallIcon() const { return smallIcon; }
 
+	/// Returns the owning MDI parent.
 	MDIParent* getParent() { return static_cast<MDIParent*>(BaseType::getParent()); }
+	/// Returns the owning MDI parent.
 	const MDIParent* getParent() const { return static_cast<const MDIParent*>(BaseType::getParent()); }
 protected:
+	/// Handles activation notifications to keep parent/taskbar state in sync.
 	virtual bool handleMessage(const MSG& msg, LRESULT& retVal);
 
 	// Protected since this Widget we HAVE to inherit from
