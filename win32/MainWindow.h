@@ -22,13 +22,11 @@
 
 #include <dcpp/forward.h>
 
-#include <dcpp/ConnectionManagerListener.h>
-#include <dcpp/CriticalSection.h>
 #include <dcpp/HttpManagerListener.h>
 #include <dcpp/LogManagerListener.h>
+#include <dcpp/PrivateChatManagerListener.h>
 #include <dcpp/QueueManagerListener.h>
 #include <dcpp/User.h>
-#include <dcpp/UserConnectionListener.h>
 #include <dcpp/WindowInfo.h>
 
 #include <dwt/widgets/MDIFrame.h>
@@ -42,10 +40,9 @@ using std::unique_ptr;
 class MainWindow :
 	public dwt::MDIFrame,
 	public AspectStatus<MainWindow>,
-	private ConnectionManagerListener,
-	private UserConnectionListener,
 	private HttpManagerListener,
 	private LogManagerListener,
+	private PrivateChatManagerListener,
 	private QueueManagerListener
 {
 public:
@@ -85,8 +82,6 @@ public:
 	void notify(const tstring& title, const tstring& message, function<void ()> callback = nullptr, const dwt::IconPtr& balloonIcon = nullptr);
 	void setStaticWindowState(const string& id, bool open);
 	void TrayPM();
-
-	UserConnection* getPMConn(const UserPtr& user, UserConnectionListener* listener);
 
 	bool closing() const { return stopperThread != 0; }
 
@@ -157,8 +152,6 @@ private:
 
 	bool tray_pm;
 	bool syncingWindowTabs;
-	unordered_map<UserPtr, UserConnection*, User::Hash> ccpms;
-	CriticalSection ccpmMutex;
 
 	/* sorted list of plugin commands. static because they may be added before the window has
 	actually been created.
@@ -267,13 +260,6 @@ private:
 
 	static DWORD WINAPI stopper(void* p);
 
-	// ConnectionManagerListener
-	virtual void on(ConnectionManagerListener::Connected, ConnectionQueueItem* cqi, UserConnection* uc) noexcept;
-	virtual void on(ConnectionManagerListener::Removed, ConnectionQueueItem* cqi) noexcept;
-
-	// UserConnectionListener
-	virtual void on(UserConnectionListener::PrivateMessage, UserConnection* uc, const ChatMessage& message) noexcept;
-
 	// HttpManagerListener
 	void on(HttpManagerListener::Failed, HttpConnection*, const string&) noexcept;
 	void on(HttpManagerListener::Complete, HttpConnection*, OutputStream*) noexcept;
@@ -281,6 +267,9 @@ private:
 
 	// LogManagerListener
 	void on(LogManagerListener::Message, time_t t, const string& m) noexcept;
+
+	// PrivateChatManagerListener
+	void on(PrivateChatManagerListener::PrivateMessage, const ChatMessage& message, const HintedUser& user, bool fromBot) noexcept;
 
 	// QueueManagerListener
 	void on(QueueManagerListener::Finished, QueueItem* qi, const string& dir, int64_t speed) noexcept;
