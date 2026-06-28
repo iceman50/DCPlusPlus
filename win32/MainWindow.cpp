@@ -103,6 +103,7 @@ MainWindow::MainWindow() :
 	rebar(0),
 	paned(0),
 	mdiPane(0),
+	mdiTabs(0),
 	windowMenu(0),
 	transfers(0),
 	toolbar(0),
