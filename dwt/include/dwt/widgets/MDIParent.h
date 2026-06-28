@@ -227,6 +227,8 @@ public:
 	void setBackgroundImage(const BitmapPtr& bitmap);
 	/// Sets a centered background icon.
 	void setBackgroundImage(const IconPtr& icon);
+	/// Returns whether a background bitmap or icon has been provided.
+	bool hasBackgroundImage() const { return backgroundImage || backgroundIcon; }
 	/// Clears the background image/icon.
 	void clearBackgroundImage();
 

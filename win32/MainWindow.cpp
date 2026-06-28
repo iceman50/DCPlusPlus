@@ -648,6 +648,9 @@ void MainWindow::initStatusBar() {
 void MainWindow::initMDI() {
 	dcdebug("initMDI\n");
 	mdiPane = paned->addChild(Container::Seed());
+	if(!getMDI()->hasBackgroundImage()) {
+		getMDI()->setBackgroundColor(WinUtil::bgColor);
+	}
 	mdiPane->onSized([this](const dwt::SizedEvent&) { syncMDIClientBounds(); });
 	getMDI()->onChildRegistered([this](dwt::MDIChildPtr) { syncWindowTabs(); });
 	getMDI()->onChildUnregistered([this](dwt::MDIChildPtr) { syncWindowTabs(); });
@@ -1568,6 +1571,9 @@ void MainWindow::handleSettings() {
 		}
 		if(static_cast<COLORREF>(SETTING(BACKGROUND_COLOR)) != WinUtil::bgColor) {
 			WinUtil::bgColor = SETTING(BACKGROUND_COLOR);
+			if(!getMDI()->hasBackgroundImage()) {
+				getMDI()->setBackgroundColor(WinUtil::bgColor);
+			}
 			newColors = true;
 		}
 		if(newColors) {
