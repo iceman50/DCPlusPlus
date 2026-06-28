@@ -109,6 +109,7 @@ MainWindow::MainWindow() :
 	toolbar(0),
 tray_pm(false),
 syncingWindowTabs(false),
+redrawMDIOnRestore(false),
 geoRegion(GeoRegion_Idle),
 geoStaticServe(false),
 stopperThread(NULL),
@@ -2193,8 +2194,16 @@ void MainWindow::handleRestore() {
 
 bool MainWindow::handleMessage(const MSG& msg, LRESULT& retVal) {
 	if(msg.message == WM_SIZE) {
-		if(msg.wParam != SIZE_MINIMIZED) {
+		if(msg.wParam == SIZE_MINIMIZED) {
+			redrawMDIOnRestore = true;
+		} else {
 			layout();
+
+			if(redrawMDIOnRestore) {
+				redrawMDIOnRestore = false;
+				::RedrawWindow(getMDI()->handle(), nullptr, nullptr,
+					RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+			}
 		}
 
 		// MainWindow owns MDICLIENT geometry through layout()+syncMDIClientBounds().

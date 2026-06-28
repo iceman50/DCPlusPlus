@@ -152,6 +152,7 @@ private:
 
 	bool tray_pm;
 	bool syncingWindowTabs;
+	bool redrawMDIOnRestore;
 
 	/* sorted list of plugin commands. static because they may be added before the window has
 	actually been created.
