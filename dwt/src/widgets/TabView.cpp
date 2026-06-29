@@ -347,7 +347,7 @@ IconPtr TabView::getIcon(CompositePtr w) const {
 void TabView::setIcon(CompositePtr w, const IconPtr& icon) {
 	auto i = findTab(w);
 	auto ti = getTabInfo(i);
-	if(ti) {
+	if(ti && ti->icon != icon) {
 		removeIcon(i);
 		ti->icon = 0;
 

@@ -655,7 +655,15 @@ void MainWindow::initMDI() {
 	mdiPane->onSized([this](const dwt::SizedEvent&) { syncMDIClientBounds(); });
 	getMDI()->onChildRegistered([this](dwt::MDIChildPtr) { syncWindowTabs(); });
 	getMDI()->onChildUnregistered([this](dwt::MDIChildPtr) { syncWindowTabs(); });
-	getMDI()->onChildActivated([this](dwt::MDIChildPtr) { syncWindowTabs(); });
+	getMDI()->onChildActivated([this](dwt::MDIChildPtr child) {
+		if(!mdiTabs || !child || syncingWindowTabs) {
+			return;
+		}
+
+		syncingWindowTabs = true;
+		auto resetSync = dcpp::makeScopedFunctor([this] { syncingWindowTabs = false; });
+		mdiTabs->setActive(static_cast<dwt::CompositePtr>(child));
+	});
 	getMDI()->onChildIconChanged([this](dwt::MDIChildPtr child, const dwt::IconPtr& icon) {
 		if(mdiTabs && child) {
 			mdiTabs->setIcon(child, icon);
@@ -1305,9 +1313,6 @@ void MainWindow::syncWindowTabs() {
 			});
 		}
 
-		if(auto frame = dynamic_cast<MDIChildFrameBase*>(child)) {
-			mdiTabs->setIcon(child, frame->getIcon());
-		}
 	}
 
 	if(auto active = getMDI()->getActive()) {
@@ -2215,10 +2220,12 @@ bool MainWindow::handleMessage(const MSG& msg, LRESULT& retVal) {
 
 	auto handled = dwt::MDIFrame::handleMessage(msg, retVal);
 
-	if(msg.message == WM_MDIACTIVATE || msg.message == WM_MDISETMENU || msg.message == WM_MDIREFRESHMENU ||
+	if(msg.message == WM_MDISETMENU || msg.message == WM_MDIREFRESHMENU ||
 		msg.message == WM_MDICREATE || msg.message == WM_MDIDESTROY)
 	{
 		syncWindowTabs();
+		::DrawMenuBar(handle());
+	} else if(msg.message == WM_MDIACTIVATE) {
 		::DrawMenuBar(handle());
 	}
 
