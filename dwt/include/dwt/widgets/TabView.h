@@ -61,6 +61,7 @@ class TabView :
 	friend class WidgetCreator< TabView >;
 	typedef std::function<void (const tstring&)> TitleChangedFunction;
 	typedef std::function<void (CompositePtr)> ActiveChangedFunction;
+	typedef std::function<void (int)> RowsChangedFunction;
 	typedef std::function<bool (const ScreenCoordinate&)> ContextMenuFunction;
 
 	using aspects::Caption<TabView>::setText;
@@ -121,6 +122,10 @@ public:
 	void onActiveChanged(const ActiveChangedFunction& f) {
 		activeChangedFunction = f;
 	}
+	void onRowsChanged(const RowsChangedFunction& f) {
+		rowsChangedFunction = f;
+	}
+	int getRowCount() const { return rowCount > 0 ? rowCount : 1; }
 
 	void onTabContextMenu(CompositePtr w, const ContextMenuFunction& f);
 
@@ -182,6 +187,7 @@ private:
 
 	TitleChangedFunction titleChangedFunction;
 	ActiveChangedFunction activeChangedFunction;
+	RowsChangedFunction rowsChangedFunction;
 
 	// these can be set through the Seed
 	unsigned widthConfig;
@@ -204,6 +210,7 @@ private:
 	Rectangle clientSize;
 	ImageListPtr icons;
 	int active;
+	int rowCount;
 	CompositePtr middleClosing;
 	CompositePtr dragging;
 	tstring tipText;

@@ -690,6 +690,11 @@ void MainWindow::initWindowTabs() {
 	seed.manageVisibility = false;
 	seed.ctrlTab = true;
 	mdiTabs = addChild(seed);
+	mdiTabs->onRowsChanged([this](int) {
+		// The native control changes its row count internally. Re-run the parent
+		// layout asynchronously so the tab callback can finish before it is resized.
+		callAsync([this] { layout(); });
+	});
 
 	mdiTabs->onActiveChanged([this](dwt::CompositePtr selected) {
 		if(syncingWindowTabs) {
@@ -1222,7 +1227,8 @@ void MainWindow::layout() {
 }
 
 int MainWindow::getWindowTabsHeight() const {
-	return std::max(::GetSystemMetrics(SM_CYSMICON) + 10, 24);
+	const auto rowHeight = std::max(::GetSystemMetrics(SM_CYSMICON) + 10, 24);
+	return rowHeight * (mdiTabs ? mdiTabs->getRowCount() : 1);
 }
 
 void MainWindow::syncWindowTabs() {

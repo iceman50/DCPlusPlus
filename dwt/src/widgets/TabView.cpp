@@ -75,6 +75,7 @@ highlighted(-1),
 highlightClose(false),
 closeAuthorized(false),
 active(-1),
+rowCount(0),
 middleClosing(0),
 dragging(0)
 {
@@ -520,6 +521,14 @@ tstring TabView::formatTitle(tstring title) {
 }
 
 void TabView::layout() {
+	const auto rows = TabCtrl_GetRowCount(handle());
+	if(rows != rowCount) {
+		rowCount = rows;
+		if(rowsChangedFunction) {
+			rowsChangedFunction(rowCount);
+		}
+	}
+
 	Rectangle tmp = getUsableArea(true);
 	if(!(tmp == clientSize)) {
 		BaseType::redraw(Rectangle(Widget::getClientSize()));
@@ -868,8 +877,8 @@ void TabView::handlePainting(PaintCanvas& canvas) {
 	for(size_t i = 0; i < size(); ++i) {
 		RECT rc;
 		if(TabCtrl_GetItemRect(handle(), i, &rc) &&
-			(rc.right >= rect.left() || rc.left <= rect.right()) &&
-			(rc.bottom >= rect.top() || rc.top <= rect.bottom()))
+			rc.right >= rect.left() && rc.left <= rect.right() &&
+			rc.bottom >= rect.top() && rc.top <= rect.bottom())
 		{
 			if(static_cast<int>(i) == sel) {
 				rc.top -= 2;
